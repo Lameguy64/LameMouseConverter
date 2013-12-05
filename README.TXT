@@ -1,6 +1,6 @@
 LameMouseConverter by John "Lameguy" Villamor / Lameguy64
 Protected under Mozilla Public License v2
-2021 Meido-Tek KYS Hardware Division
+2022 Meido-Tek KYS Hardware Division
 
 Introduction
 
@@ -51,7 +51,7 @@ Component List
     
     For the wiring diagram a KiCad .sch file should be provided in the code
     repository.
-
+    
 
 Operating Characteristics
 
@@ -103,15 +103,15 @@ Baud Rate Configuration
     baud when switching to Microsoft compatible mode in response to the RTS
     signal toggle. Using higher baud rates reduces mouse input latency.
 
-    Command	Baud Rate
+    Command     Baud Rate
 
-      *n	  1200
+      *n        1200
 
-      *o	  2400
+      *o        2400
 
-      *p	  4800
+      *p        4800
 
-      *q	  9600
+      *q        9600
     
     When writing a mouse driver, it is best to check if Logitech extended
     mouse commands are supported by sending a 'f' character to the mouse,
@@ -139,37 +139,37 @@ Mouse Report Rate Configuration
     mouse report rates are substituted to the closest compatible mouse rate
     instead for compatibility reasons.
 
-    Command	Intended Rate	Actual Rate
+    Command     Intended Rate   Actual Rate
 
-      J		  10		  10
+      J           10              10
 
-      K		  20		  20
+      K           20              20
 
-      L		  35		  40
+      L           35              40
 
-      R		  50		  40
+      R           50              40
 
-      M		  60		  60
+      M           60              60
 
-      Q		  100		  100
+      Q           100             100
 
-      N		  150		  200
+      N           150             200
 
 
     The following table describes the estimated maximum mouse rates for each
     of the available baud rate options. The mouse rate selected must be equal
     or less than what the baud rate can support.
 
-    Baud Rate	Est. Max Rate 	Est. Max Rate*
-    		(Microsoft)	(Mouse Systems)
+    Baud Rate   Est. Max Rate   Est. Max Rate*
+                (Microsoft)     (Mouse Systems)
 
-      1200	  44		  40
+      1200        44          40
 
-      2400	  88		  80
+      2400        88          80
 
-      4800	  177		  160
+      4800        177         160
 
-      9600	  355		  320
+      9600        355         320
 
       * With a mouse driver that handles Mouse Systems properly.
 
@@ -252,6 +252,26 @@ Mouse Modes and Packet Formats
       drivers that only support two buttons will simply do nothing.
 
 
+    SummaMouse MM Series Format (send 'S')
+
+      The following table describes the packet format of the MM Series
+      compatible mode format as used by SummaGraphics SummaMouse products
+      and the Logitech C7's preferred format when used with the official
+      MouseWare driver. Packets are reported at 2400 baud (unless changed),
+      8 data bits, 1 stop bit and odd parity.
+
+      Byte b7  b6  b5  b4  b3  b2  b1  b0
+      ----------------------------------- 
+       1st  1   0   0  Sx  Sy   L   M   R
+       2nd  0  x6  x5  x4  x3  x2  x1  x0
+       3rd  0  y6  y5  y4  y3  y2  y1  y0
+
+      The motion values are 7-bit unsigned values and negative values are
+      not reported in complementary format. Instead the sign bits (Sx, Sy)
+      indicate if the unsigned value should be treated as a positive (1)
+      or negative (0) value.
+
+      
     Logitech (aka. Microsoft Plus) Format (to be supported soon)
     
       The Logitech format is identical to the Microsoft format, only an
@@ -278,44 +298,45 @@ Supported Mouse Commands Summary
     result, moreso if they check the copyright string or misc commands not
     yet supported.
 
-    Command	Hex Digit	Description
+    Command     Hex Digit   Description
 
-      J		  4Ah		Set mouse to 10 reports per second
+      J           4Ah       Set mouse to 10 reports per second
 
-      K		  4Bh		Set mouse to 20 reports per second
+      K           4Bh       Set mouse to 20 reports per second
 
-      L		  4Ch		Set mouse to 40 reports per second
+      L           4Ch       Set mouse to 40 reports per second
 
-      R		  52h		Set mouse to 40 reports per second
+      R           52h       Set mouse to 40 reports per second
 
-      M		  4Dh		Set mouse to 60 reports per second
+      M           4Dh       Set mouse to 60 reports per second
 
-      Q		  51h		Set mouse to 100 reports per second
+      Q           51h       Set mouse to 100 reports per second
 
-      N		  4Eh		Set mouse to 200 reports per second
-
-      T		  54h		Set Three Byte Packed mode (C7 native mode?)
-
-      U		  55h		Set Mouse Systems compatible mode
-
-      V		  56h		Set Microsoft compatible mode
-
-      t		  74h		Get current mode and revision number in hex
-
-      f		  66h		Get current mode and revision number byte
+      N           4Eh       Set mouse to 200 reports per second
       
-      c		  63h		Get copyright and revision string
+      S           53h       Set SummaMouse MM Series mode
 
-      m		  6Dh		Force Mouse Systems (disables RTS detection)*      
-				Also sets mode to Mouse Systems at 1200 baud
+      T           54h       Set Three Byte Packed mode (old Mouse Systems)
 
-      *n	  6Eh		Set 1200 baud rate
+      U           55h       Set Mouse Systems compatible mode
 
-      *o	  6Fh		Set 2400 baud rate
+      V           56h       Set Microsoft compatible mode
 
-      *p	  70h		Set 4800 baud rate
+      t           74h       Get current mode and revision number in hex
 
-      *q	  71h		Set 9600 baud rate
+      f           66h       Get current mode and revision number byte
+      
+      c           63h       Get copyright and revision string
+
+      m           6Dh       Force Mouse Systems and disables RTS detection*
+
+      *n          6Eh       Set 1200 baud rate
+
+      *o          6Fh       Set 2400 baud rate
+
+      *p          70h       Set 4800 baud rate
+
+      *q          71h       Set 9600 baud rate
 
       * LameMouseConverter specific command.
     
@@ -336,9 +357,9 @@ Credits & References
     AVR firmware & schematic: John "Lameguy" Wilbert Villamor (Lameguy64)
 
     References used:
-	The ATmega328P datasheet
-	http://www.burtonsys.com/ps2_chapweske.htm
-	https://www.win.tue.nl/~aeb/linux/kbd/scancodes-13.html#mousemodes
+    The ATmega328P datasheet
+    http://www.burtonsys.com/ps2_chapweske.htm
+    https://www.win.tue.nl/~aeb/linux/kbd/scancodes-13.html#mousemodes
 
     Special thanks to Kris Chambers (kristopher) for his PS2Mouse Arduino
     library, which helped spark the idea of developing a PS/2 mouse converter
