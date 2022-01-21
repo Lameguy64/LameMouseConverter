@@ -5,9 +5,19 @@
 ;
 ; Controller: ATmega328P @ 16MHz (or Arduino UNO R3 @ 16MHz)
 ;
+; Changelog:
+;
+;   January 21, 2022:
+;     * Added support for SummaMouse MM Series mouse.
+;     * Fixed init failure with older Microsoft PS/2 mice (and possibly other
+;	similarly old mice) by increasing the wait delay to 600ms on init.
+;	
+;   August 31, 2021:
+;     * Initial Version.
+;
 ; Todo:
 ; * Add Watchdog Timer in case the converter enters a deadlock state.
-; * Add Logitech protocol.
+; * Add Logitech 3-button protocol, possibly with wheel.
 ;
 .NOLIST
 .INCLUDE "m328Pdef.inc" 
@@ -20,7 +30,7 @@
 .EQU MODE_HEX	= 2			; Hexadecimal mode (unsupported)
 .EQU MODE_PADR	= 3			; Bit Pad One Relative (unsupported)
 .EQU MODE_RES	= 4			; Reserved
-.EQU MODE_MM	= 5			; MM series (unsupported)
+.EQU MODE_MM	= 5			; MM series
 .EQU MODE_PADA	= 6			; Bit Pad One Absolute (unsupported)   
 .EQU MODE_MS	= 7			; Microsoft mouse
 
@@ -107,7 +117,7 @@
 	OUT	PS2_PORT,r16
 .ENDMACRO
 
-; Delay macros (tuned for 16MHz)
+; Delay macros (roughly tuned for 16MHz)
 ;
 .MACRO delay300us			; Delay ~300us
 	LDI	r25,0x04
@@ -272,12 +282,17 @@ main:
 	OUT	L13_PORT,r16
 	LDS	r16,mousemode
 	ANDI	r16,0x70
+	CPI	r16,(MODE_MM<<4)
+	BREQ	send_mm
 	CPI	r16,(MODE_MSYS<<4)
 	BREQ	send_msys
 	CPI	r16,(MODE_MS<<4)
 	BREQ	send_ms
     send_tbp:
 	RCALL	sendpacketTBP
+	RJMP	senddone
+    send_mm:
+	RCALL	sendpacketMM
 	RJMP	senddone
     send_msys:
 	RCALL	sendpacketMSYS		; Send event as a Mouse Systems packet
@@ -344,6 +359,20 @@ rts_cycle:
 	RET
 	; rts_cycle
 	
+; SetMMmode - Set SummaMouse MM Series mode
+;
+SetMMmode:
+	LDS	r16,mousemode		; Set new mouse mode
+	ANDI	r16,0x8F
+	ORI	r16,(MODE_MM<<4)
+	STS	mousemode,r16
+	LDI	r19,1			; Set to 8-bit frame format
+	RCALL	USART_setbits
+	LDI	r19,3			; Set odd parity
+	RCALL	USART_setparity
+	RET
+	; SetMMmode
+
 ; SetTBPmode - Set Three Byte Packed mode
 ;
 SetTBPmode:
@@ -411,43 +440,66 @@ USART_recvfunc:
     ratedone:
 	LDS	r18,mousemode		; Check if in special command
 	MOV	r17,r18			; sequence
-	ANDI	r17,0x4
+	ANDI	r17,0x8
 	BRNE	specialcmd
+	CPI	r16,'S'
+	BRNE	nommcmd
+	RJMP	usemm
+    nommcmd:
+	CPI	r16,'T'
+	BRNE	nothreebytecmd
+	RJMP	usethreebyte
+    nothreebytecmd:
+	CPI	r16,'U'
+	BRNE	nomousesyscmd
+	RJMP	usemousesys
+    nomousesyscmd:
+	CPI	r16,'V'
+	BRNE	nomscmd
+	RJMP	usemicrosoft
+    nomscmd:
 	CPI	r16,'*'			; Start of speed change escape
 	BREQ	startescape
 	CPI	r16,'m'
 	BREQ	disablerts
-	CPI	r16,'T'
-	BREQ	usethreebyte
-	CPI	r16,'U'
-	BREQ	usemousesys
-	CPI	r16,'V'
-	BREQ	usemicrosoft
 	CPI	r16,'c'			; Report copyright string and version
 	BREQ	sendcopyright
 	CPI	r16,'t'			; Send status hex
 	BREQ	sendstatushex
 	CPI	r16,'f'			; Send status byte
 	BREQ	sendstatusbyte
+	;CPI	r16,'s'
+	;BREQ	sendmmstat
+	;CPI	r16,0x05
+	;BREQ	sendmmdiag
 	RJMP	USART_done
     setrate:
 	LPM	r19,Z
 	STS	setrateval,r19
     	RJMP	USART_done
     startescape:
-	SBR	r18,0x4			; Set special command bit
+	SBR	r18,0x8			; Set special command bit
 	STS	mousemode,r18
 	RJMP	USART_done
     specialcmd:				; Parse special command
-    	CBR	r18,0x4			; Clear special command bit
+    	CBR	r18,0x8			; Clear special command bit
 	STS	mousemode,r18
+	CPI	r16,'?'			; Get current speed?
+	BREQ	querymouse
 	CPI	r16,'n'			; Ignore invalid speeds
-	BRMI	USART_done
+	BRMI	badspeed
 	CPI	r16,'q'+1
-	BRSH	USART_done
+	BRSH	badspeed
 	MOV	r19,r16			; Set new baud rate
 	SUBI	r19,'n'
 	RCALL	USART_setbaud
+    badspeed:
+	RJMP	USART_done
+    querymouse:
+	LDI	r19,'C'
+	RCALL	USART_write
+	LDI	r19,'7'
+	RCALL	USART_write
 	RJMP	USART_done
     disablerts:				; Disable RTS to force Mouse Systems
     	LDS	r16,mousemode
@@ -480,6 +532,23 @@ USART_recvfunc:
 	RCALL	USART_writestrZ
 	LDI	r19,0
 	RCALL	USART_write
+	RJMP	USART_done
+    sendmmstat:
+	LDI	r19,0b00001111
+	RJMP	USART_write
+    	RJMP	USART_done
+    sendmmdiag:
+    	BST	r19,0
+	BLD	r16,2
+	BST	r19,2
+	BLD	r16,1
+	BST	r19,1
+	BLD	r16,0
+	MOV	r0,r16
+	LDI	r18,3
+	RCALL	xmitpacket
+    usemm:
+    	RCALL	SetMMmode
 	RJMP	USART_done
     usethreebyte:
     	RCALL	SetTBPmode
@@ -518,10 +587,11 @@ ratetable:
 ;
 copyright_str:
 	.DB	13,10
-	.DB	"LAMEMOUSECONVERTER V0.10B FOR CIRC. REV.1 "
-	.DB	"BY JOHN ",0x22,"LAMEGUY",0x22," WILBERT VILLAMOR",13,10
-	.DB	"2021 MEIDO-TEK KYS HARDWARE DIVISION",13,10
-	.DB	"THERE NEEDS TO BE A FILTER AGAINST <PROJECTNAME>DEV HANDLES",13,10,0
+	.DB	"COPYRIGHT (C) 1985 LOGITECH INC. C7 REVISION 3.0",0,0
+;	.DB	"LAMEMOUSECONVERTER V0.10B FOR CIRC. REV.1 "
+;	.DB	"BY JOHN ",0x22,"LAMEGUY",0x22," WILBERT VILLAMOR",13,10
+;	.DB	"2021 MEIDO-TEK KYS HARDWARE DIVISION",13,10
+;	.DB	"THERE NEEDS TO BE A FILTER AGAINST <PROJECTNAME>DEV HANDLES",13,10,0
 
 ; Start of data segment
 ;
@@ -545,4 +615,3 @@ mousemode:	.BYTE 1			; Mouse converter mode
 					;   bit3: Reserved
 					;   bit4-6: Mouse protocol mode
 					;   bit7: Disable RTS detection
-

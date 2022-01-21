@@ -72,6 +72,21 @@ USART_setbits:
 	RET
 	; USART_setbits
 	
+; USART_setparity
+;
+USART_setparity:
+	PUSH	r16
+	LDS	r16,UCSR0C
+	ANDI	r16,0b11001111
+	BST	r19,0
+	BLD	r16,4
+	BST	r19,1
+	BLD	r16,5
+	STS	UCSR0C,r16
+	POP	r16
+	RET
+	; USART_setparity
+	
 ; USART_write - Write a byte to USART
 ;
 ; This function will not transmit a byte until CTS pin is clear.

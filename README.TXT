@@ -15,8 +15,8 @@ Introduction
     The LameMouseConverter can be used to adapt any PS/2 mouse, ball or
     optical, into a 3-button Mouse Systems or Microsoft compatible serial
     mouse. Coupled with the baud rate and mouse rate configuration features
-    the conversion may become indistinguishable when using a mouse driver
-    that can utilize said serial mouse features.
+    the conversion may become indistinguishable to a PS/2 mouse when using
+    a mouse driver that can utilize said serial mouse features.
 
 
 Features
@@ -27,8 +27,8 @@ Features
       changed with software commands.
       
     - Supports Mouse Systems (known as 5 byte packed in MouseWare), Microsoft
-      3-button and Logitech C7 Three Byte Packed protocol modes. Protocol
-      modes can be selected through software commands.
+      3-button, SummaMouse MM Series and Logitech C7 Three Byte Packed protocol
+      modes. Protocol modes can be selected through software commands.
       
     - Supports software controlled baud rate configuration, mouse report rate
       and mouse mode selection through software commands inherited from the
@@ -252,7 +252,7 @@ Mouse Modes and Packet Formats
       drivers that only support two buttons will simply do nothing.
 
 
-    Logitech Extended Microsoft Format (to be supported soon)
+    Logitech (aka. Microsoft Plus) Format (to be supported soon)
     
       The Logitech format is identical to the Microsoft format, only an
       additional byte is reported whenever the middle button is pressed or

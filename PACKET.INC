@@ -63,6 +63,44 @@
 	SBCI	@1,0
 .ENDMACRO
 
+; sendpacketMM - Transmit a SummaMouse MM Series mouse packet
+;
+; Reminder: MM packets must be sent at 8 data bits, 1 stop, odd parity
+;
+sendpacketMM:
+	CLI
+	CAPTO8	[r20,r22:r23]		; Cap mouse movements to 8-bit signed
+	CAPTO8	[r21,r24:r25]
+	CLR	r22			; Clear coordinates once latched
+	CLR	r23			; (does not have the 'jello' effect)
+	CLR	r24
+	CLR	r25
+	SEI
+	CLR	r16			; Setup button bits
+	BST	r19,0
+	BLD	r16,2
+	BST	r19,2
+	BLD	r16,1
+	BST	r19,1
+	BLD	r16,0
+	BST	r20,7			; Transfer sign bits
+	BLD	r16,4
+	BST	r21,7
+	BLD	r16,3
+	LDI	r17,0b10011000		; Invert bits
+	EOR	r16,r17
+	SBRC	r20,7			; Perform ABS on movement coords
+	NEG	r20
+	SBRC	r21,7
+	NEG	r21
+	MOV	r0,r16			; Transfer results and transmit
+	MOV	r1,r20
+	MOV	r2,r21
+	LDI	r18,3
+	RCALL	xmitpacket
+	RET
+	; sendpacketMM
+	
 ; sendpacketTBP - Transmits a Three Byte Packed mouse packet
 ;
 sendpacketTBP:

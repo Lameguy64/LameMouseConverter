@@ -44,8 +44,8 @@ ps2_init:
 	RCALL	ps2_flushbuff
 	CPI	r16,0xFA		; Retry init if response is not ACK
 	BRNE	init_retry
-	LDI	r20,0x01		; Delay before reading init result
-	LDI	r19,0xF4
+	LDI	r20,0x02		; Delay 600ms before reading init result
+	LDI	r19,0x58
 	RCALL	delayms
 	RCALL	ps2_read		; Get init result byte
 	MOV	r17,r16
