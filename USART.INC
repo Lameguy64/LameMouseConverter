@@ -17,9 +17,9 @@
 ;
 USART_init:
 	LDI	r16,(1<<RXEN0)|(1<<TXEN0)|(1<<RXCIE0)   ; Enable transceiver
-	STS	UCSR0B,r16		; and receiver with receive IRQs
-	LDI	r16,0b00000110		; Configure for 8-bit characters
-	STS	UCSR0C,r16		; and 1 stop bit
+	STS	UCSR0B,r16		; and receiver with receive interrupt
+	LDI	r16,0b00000110		; Configure for 8-bit characters and
+	STS	UCSR0C,r16		; 1 stop bit
 	RET
 	; USART_init
 
@@ -55,6 +55,8 @@ USART_setbaud:
 	
 ; USART_setbits - Sets the number of bits of a serial frame
 ;
+; Note: Clears parity setting bits.
+;
 ; Arguments:
 ;	r19	0: Transmit with 7 bits, 1: Transmit with 8 bits
 ;
@@ -77,7 +79,7 @@ USART_setbits:
 USART_setparity:
 	PUSH	r16
 	LDS	r16,UCSR0C
-	ANDI	r16,0b11001111
+	ANDI	r16,0b11001110
 	BST	r19,0
 	BLD	r16,4
 	BST	r19,1

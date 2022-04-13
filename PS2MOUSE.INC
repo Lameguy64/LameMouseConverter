@@ -60,9 +60,9 @@ ps2_init:
     	DEC	r17			; Skip mouse rate when all attempts
 	BREQ	mouserate_skip		; has failed
     	CLI
-    	LDI	r19,0xF3		; Set mouse rate to 40Hz
+    	LDI	r19,0xF3		; Set mouse rate to default rate
 	RCALL	ps2_write
-	LDI	r19,40
+	LDI	r19,PS2_RATE
 	RCALL	ps2_write
 	SEI
 	RCALL	ps2_read
@@ -99,7 +99,7 @@ ps2_init:
 	RET
 	; ps2_init
 
-; ps2_enable - Enable mouse to stream
+; ps2_enable - Enable mouse for streaming mode
 ;
 ps2_enable:
 	SET
@@ -220,14 +220,14 @@ ps2_write:
 	CPI	r17,10
 	BREQ	write_fail
 	SBIC	PS2_IN,PS2_CLK
-	RJMP	write_wait_ini		; Device is in receive mode past this
+	RJMP	write_wait_ini
 	RJMP	write_ready
     write_fail:
 	CLK_HIGH
 	DAT_HIGH
         LDI	r16,1
 	RJMP	write_ret
-    write_ready:
+    write_ready:			; Device is in receive mode past this
 	LDI	r18,8			; Number of bits to shift
 	LDI	r17,1			; Parity bit
     write_loop:

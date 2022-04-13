@@ -1,16 +1,35 @@
-; PS2SER2.ASM - AVR firmware for the LameMouseConverter (V0.10B)
-; 2021 John "Lameguy" Wilbert Villamor of Meido-Tek KYS Hardware Division
+; PS2SER2.ASM - AVR firmware for the LameMouseConverter (V0.12)
+; 2021-2022 John "Lameguy" Wilbert Villamor of Meido-Tek KYS Hardware Division
 ;
 ; Assembler: AVRA (1.4.2)
 ;
 ; Controller: ATmega328P @ 16MHz (or Arduino UNO R3 @ 16MHz)
+; Can be made to work on smaller controllers with some modifications provided
+; one USART and one hardware INT pin is present.
 ;
 ; Changelog:
 ;
+;   April 11, 2022:
+;     * Version 1.12.
+;     * Fixed SummaMouse status command ('s') causing stack corruption.
+;     * Added query button count ('k') command.
+;     * Fixed inverted Y axis in SummaMouse MM Series protocol mode.
+;     * Reactivated 'proper' firmware copyright string.
+;     * Changed default PS/2 report rate to 60Hz.
+;     * RTS toggle now resets PS/2 report rate to default.
+;     * Works with Logitech MouseWare drivers if RTS disconnected (C7 mode).
+;     * Added prompt mode ('D') command. Inhibits mouse packet transmission.
+;     * Updated SummaMouse status command ('s') to report prompt mode status
+;       (required for Windows MouseWare driver).
+;     * Fixed mouse rate commands interpreted during extended mouse command
+;       sequence.
+;     * Added report request command ('P') for prompt mode.
+;     * Optimized code size.
+;
 ;   January 21, 2022:
 ;     * Added support for SummaMouse MM Series mouse.
-;     * Fixed init failure with older Microsoft PS/2 mice (and possibly other
-;	similarly old mice) by increasing the wait delay to 600ms on init.
+;     * Fixed init failure with older Microsoft PS/2 mice by increasing the
+;       wait delay to 600ms on init.
 ;	
 ;   August 31, 2021:
 ;     * Initial Version.
@@ -18,10 +37,16 @@
 ; Todo:
 ; * Add Watchdog Timer in case the converter enters a deadlock state.
 ; * Add Logitech 3-button protocol, possibly with wheel.
+; * Compatibility for smaller ATmega controllers.
+; * Bus mouse or quadrature support, preferably as a separate .ASM program.
 ;
 .NOLIST
 .INCLUDE "m328Pdef.inc" 
 .LIST
+
+; Initial PS/2 mouse rate
+;
+.EQU PS2_RATE	= 60
 
 ; Mouse mode definitions (derived from the Logimouse C7)
 ;
@@ -36,7 +61,7 @@
 
 ; Revision number to report on format and revision byte
 ;
-.EQU REPORT_REV	= 1
+.EQU REPORT_REV	= 1			; Revision 3.0 C7
 
 ; Port and pin assignments for PS/2 interface
 ;
@@ -77,7 +102,7 @@
 	LDI     ZH,HIGH(@0<<1)
 .ENDMACRO
 
-; Clock control macros
+; Clock line control macros
 ;
 .MACRO CLK_LOW				; Drag CLK pin low
 	IN	r16,PS2_PORT		; Turn off the pull-up
@@ -97,7 +122,7 @@
 	OUT	PS2_PORT,r16
 .ENDMACRO
 
-; Data transmission control macros
+; Data line control macros
 ;
 .MACRO DAT_LOW				; Drag DAT pin low
 	IN	r16,PS2_PORT		; Turn off internal pull-up
@@ -141,7 +166,7 @@
 .CSEG
 
 ;
-; Interrupt vectors area
+; Interrupt vector table
 ;
 .ORG 0x0000				; Reset vector
 	JMP	reset
@@ -206,6 +231,8 @@ reset:
 	STS	ps2_lastclk,r16
 	STS	mousemode,r16
 	STS	setrateval,r16
+	LDI	r19,3
+	STS	mousemode2,r19
 	CLR	r20			; Wait 100ms to let things settle
 	LDI	r19,100
 	RCALL	delayms
@@ -213,7 +240,6 @@ reset:
 	SBR	r17,(1<<INTF0)
 	OUT	EIFR,r17
 	SEI
-	RJMP	main
 	; reset
 	
 ; Main routine
@@ -238,18 +264,21 @@ main:
 	BRNE	skip_rts
 	LDS	r18,mousemode		; Load mouse mode value
 	MOV	r16,r18
-	ANDI	r16,4
+	ANDI	r16,0x04
 	IN	r17,RTS_IN		; Read RTS pin state
 	BST	r17,RTS_PIN
 	BLD	r17,2
 	BLD	r18,2			; Copy bit to mouse mode as well to
 	STS	mousemode,r18		; keep track of last state
-	ANDI	r17,4
+	ANDI	r17,0x04
 	CP	r16,r17			; Only do RTS sequence when last
 	BREQ	skip_rts		; state was off
 	BRMI	skip_rts
 	RCALL	rts_cycle		; Proceed to RTS cycle + MS mode
     skip_rts:
+    	LDS	r16,mousemode2		; Prompt mode inhibits mouse reports
+    	SBRC	r16,4
+    	RJMP	idleloop
 	LDS	r16,setrateval		; Check if mouse rate needs updating
 	AND	r16,r16
 	BRNE	dochangerate
@@ -264,45 +293,7 @@ main:
 	BRNE	hasevent
 	RJMP	idleloop
     hasevent:
-	LDS	r16,ps2_clkcount	; Check for any buffered click events
-	AND	r16,r16
-	BREQ	noclick
-	DEC	r16			; Decrement and update
-	STS	ps2_clkcount,r16
-	LDI	XH,HIGH(ps2_clkstack)	; Fetch click state from FILO buffer
-	LDS	XL,ps2_clktail
-	LD	r19,X+
-	ANDI	XL,0x7
-	STS	ps2_clktail,XL		; Store updated tail pointer
-    noclick:
-    	LDS	r19,ps2_lastclk		; Otherwise use last click state
-    clickdone:
-    	IN	r16,L13_PORT		; Turn on status LED (debug)
-	SBR	r16,(1<<L13_PIN)
-	OUT	L13_PORT,r16
-	LDS	r16,mousemode
-	ANDI	r16,0x70
-	CPI	r16,(MODE_MM<<4)
-	BREQ	send_mm
-	CPI	r16,(MODE_MSYS<<4)
-	BREQ	send_msys
-	CPI	r16,(MODE_MS<<4)
-	BREQ	send_ms
-    send_tbp:
-	RCALL	sendpacketTBP
-	RJMP	senddone
-    send_mm:
-	RCALL	sendpacketMM
-	RJMP	senddone
-    send_msys:
-	RCALL	sendpacketMSYS		; Send event as a Mouse Systems packet
-	RJMP	senddone
-    send_ms:
-	RCALL	sendpacketMS		; Send event as a Microsoft packet
-    senddone:
-	IN	r16,L13_PORT		; Turn off status LED (debug)
-	CBR	r16,(1<<L13_PIN)
-	OUT	L13_PORT,r16
+	RCALL	sendevent
 	RJMP	idleloop		; Return to idle loop
     dochangerate:
     	RCALL	ps2_flushbuff
@@ -330,6 +321,48 @@ main:
 	RJMP	idleloop
 	; main
 	
+sendevent:
+	LDS	r16,ps2_clkcount	; Check for any buffered click events
+	AND	r16,r16
+	BREQ	noclick
+	DEC	r16			; Decrement and update
+	STS	ps2_clkcount,r16
+	LDI	XH,HIGH(ps2_clkstack)	; Fetch click state from FILO buffer
+	LDS	XL,ps2_clktail
+	LD	r19,X+
+	ANDI	XL,0x7
+	STS	ps2_clktail,XL		; Store updated tail pointer
+    noclick:
+    	LDS	r19,ps2_lastclk		; Otherwise use last click state
+    	IN	r16,L13_PORT		; Turn on status LED (debug)
+	SBR	r16,(1<<L13_PIN)
+	OUT	L13_PORT,r16
+	LDS	r16,mousemode
+	ANDI	r16,0x70
+	CPI	r16,(MODE_MM<<4)
+	BREQ	send_mm
+	CPI	r16,(MODE_MSYS<<4)
+	BREQ	send_msys
+	CPI	r16,(MODE_MS<<4)
+	BREQ	send_ms
+    send_tbp:
+	RCALL	sendpacketTBP
+	RJMP	senddone
+    send_mm:
+	RCALL	sendpacketMM
+	RJMP	senddone
+    send_msys:
+	RCALL	sendpacketMSYS		; Send event as a Mouse Systems packet
+	RJMP	senddone
+    send_ms:
+	RCALL	sendpacketMS		; Send event as a Microsoft packet
+    senddone:
+	IN	r16,L13_PORT		; Turn off status LED (debug)
+	CBR	r16,(1<<L13_PIN)
+	OUT	L13_PORT,r16
+	RET
+	; sendevent
+	
 ; rts_cycle - Reports an M character and sets the converter to Microsoft mode
 ;
 rts_cycle:
@@ -341,11 +374,17 @@ rts_cycle:
 	RCALL	delayms
 	LDI	r19,'M'
 	RCALL	USART_write
-	;CLR	r20			; Send '3' character for Logitech mode
-	;LDI	r19,40
-	;RCALL	delayms
-	;LDI	r19,'3'
-	;RCALL	USART_write
+;	CLR	r20			; Send '3' character for Logitech mouse
+;	LDI	r19,40
+;	RCALL	delayms
+;	LDI	r19,'3'
+;	RCALL	USART_write
+	LDI	r19,PS2_RATE		; Set default PS/2 mouse rate
+	STS	setrateval,r19
+	LDS	r19,mousemode2
+	ANDI	r19,~0x1F
+	ORI	r19,3
+	STS	mousemode2,r19
 	CLI				; Reset all buffered mouse events
 	CLR	r22
 	CLR	r23
@@ -413,7 +452,7 @@ SetMSmode:
 	RET
 	; SetMSmode
 	
-; Interrupt handler for the receive routine
+; UART receive handler querying commands
 ;
 USART_recvfunc:
 	PUSH	r16
@@ -423,82 +462,86 @@ USART_recvfunc:
 	PUSH	r18
 	PUSH	r19
 	LDS	r16,UDR0		; Get serial byte
-	ANDI	r16,0x7F		; Mask 8th bit off just in case
-	LDZ	[ratetable]
-    rateloop:
-	LPM	r17,Z+
+	ANDI	r16,0x7F		; Mask off 8th bit
+	LDS	r18,mousemode
+	MOV	r17,r18			; Check if in extended command
+	SBRC	r17,3			; sequence (last character was *)
+	RJMP	recv_extcmd		; Jump to extended command parser
+	CLR	r18
+	LDZ	[ratetable]		; Load address of mouse rate table
+    recv_rateloop:			; Start of mouse rate searching
+	LPM	r17,Z+			; Load command character of mouse rate
 	AND	r17,r17			; Exit sequence if zero (terminator)
-	BREQ	ratedone
-	CP	r16,r17
-	BREQ	setrate
-    ratenext:
-    	LDI	r17,1
+	BREQ	recv_ratedone
+	CP	r16,r17			; Does mouse rate match command?
+	BRNE	PC+2			; Otherwise advance to next entry	
+	RJMP	recv_setnewrate		; Set new mouse rate
+    	LDI	r17,1			; Increment address then repeat
     	ADD	ZL,r17
 	CLR	r17
 	ADC	ZH,r17
-	RJMP	rateloop
-    ratedone:
-	LDS	r18,mousemode		; Check if in special command
-	MOV	r17,r18			; sequence
-	ANDI	r17,0x8
-	BRNE	specialcmd
-	CPI	r16,'S'
-	BRNE	nommcmd
+	INC	r18
+	RJMP	recv_rateloop
+    recv_ratedone:			; Parse regular commands starts here
+    	LDS	r18,mousemode
+	CPI	r16,'*'			; Is it extended command character?
+	BRNE	PC+2	
+	RJMP	recv_extchar
+	CPI	r16,'D'			; Prompt mode
+	BREQ	setpromptmode
+	CPI	r16,'P'			; Request report
+	BRNE	PC+2
+	RJMP	recv_reqreport
+	CPI	r16,'S'			; Setup SummaMouse format
+	BRNE	PC+2
 	RJMP	usemm
-    nommcmd:
-	CPI	r16,'T'
-	BRNE	nothreebytecmd
+	CPI	r16,'T'			; Setup Three-byte packed format
+	BRNE	PC+2
 	RJMP	usethreebyte
-    nothreebytecmd:
-	CPI	r16,'U'
-	BRNE	nomousesyscmd
+	CPI	r16,'U'			; Setup Mouse Systems format
+	BRNE	PC+2
 	RJMP	usemousesys
-    nomousesyscmd:
-	CPI	r16,'V'
-	BRNE	nomscmd
+	CPI	r16,'V'			; Setup Microsoft format
+	BRNE	PC+2
 	RJMP	usemicrosoft
-    nomscmd:
-	CPI	r16,'*'			; Start of speed change escape
-	BREQ	startescape
-	CPI	r16,'m'
-	BREQ	disablerts
 	CPI	r16,'c'			; Report copyright string and version
 	BREQ	sendcopyright
-	CPI	r16,'t'			; Send status hex
-	BREQ	sendstatushex
-	CPI	r16,'f'			; Send status byte
-	BREQ	sendstatusbyte
-	;CPI	r16,'s'
-	;BREQ	sendmmstat
-	;CPI	r16,0x05
-	;BREQ	sendmmdiag
+	CPI	r16,'f'			; Send format and revision
+	BREQ	sendformatbyte
+	CPI	r16,'k'			; Query number of buttons
+	BREQ	querybuttons
+	CPI	r16,'m'			; Disable RTS toggle detection
+	BREQ	disablerts
+	CPI	r16,'s'			; Send SummaMouse status
+	BREQ	sendmmstat
+	CPI	r16,'t'			; Send format and revision (hex)
+	BREQ	sendformathex
+	CPI	r16,0x05		; Send SummaMouse diagnostic report
+	BRNE	PC+2
+	RJMP	sendmmdiag
 	RJMP	USART_done
-    setrate:
-	LPM	r19,Z
-	STS	setrateval,r19
+    setpromptmode:
+	LDS	r19,mousemode2		; Set prompt mode flag
+    	SBR	r19,0x10
+    	STS	mousemode2,r19
     	RJMP	USART_done
-    startescape:
-	SBR	r18,0x8			; Set special command bit
-	STS	mousemode,r18
-	RJMP	USART_done
-    specialcmd:				; Parse special command
-    	CBR	r18,0x8			; Clear special command bit
-	STS	mousemode,r18
-	CPI	r16,'?'			; Get current speed?
-	BREQ	querymouse
-	CPI	r16,'n'			; Ignore invalid speeds
-	BRMI	badspeed
-	CPI	r16,'q'+1
-	BRSH	badspeed
-	MOV	r19,r16			; Set new baud rate
-	SUBI	r19,'n'
-	RCALL	USART_setbaud
-    badspeed:
-	RJMP	USART_done
-    querymouse:
-	LDI	r19,'C'
+    sendcopyright:			; Send copyright string
+    	LDZ	[copyright_str]
+	RCALL	USART_writestrZ
+	LDI	r19,0
 	RCALL	USART_write
-	LDI	r19,'7'
+	RJMP	USART_done
+    sendformatbyte:			; Send format byte
+    	LDS	r19,mousemode
+	ANDI	r19,0x70
+	LSR	r19
+	LSR	r19
+	LSR	r19
+	ORI	r19,(REPORT_REV<<4)
+	RCALL	USART_write		; Transmit byte
+	RJMP	USART_done
+    querybuttons:			; Send number of buttons (3)
+	LDI	r19,'3'
 	RCALL	USART_write
 	RJMP	USART_done
     disablerts:				; Disable RTS to force Mouse Systems
@@ -509,35 +552,42 @@ USART_recvfunc:
 	RCALL	USART_setbaud
 	RCALL	SetMSYSmode
 	RJMP	USART_done
-    sendstatushex:			; Send status hex
-    	LDS	r19,mousemode
-	ANDI	r19,0x70
-	LSR	r19
-	LSR	r19
-	LSR	r19
-	ORI	r19,(REPORT_REV<<4)
-	RCALL	printhex8
-	RJMP	USART_done
-    sendstatusbyte:			; Send status byte
-    	LDS	r19,mousemode
-	ANDI	r19,0x70
-	LSR	r19
-	LSR	r19
-	LSR	r19
-	ORI	r19,(REPORT_REV<<4)
-	RCALL	USART_write		; Transmit byte
-	RJMP	USART_done
-    sendcopyright:			; Send copyright string
-    	LDZ	[copyright_str]
-	RCALL	USART_writestrZ
-	LDI	r19,0
+    sendmmstat:
+	LDS	r19,mousemode2
+	BST	r19,4			; Get the prompt mode bit
+	LDI	r19,0b00001111
+	BLD	r19,6			; Store prompt mode bit to status
+	RCALL	USART_write
+    	RJMP	USART_done
+    sendformathex:			; Send format and rate in ASCII
+    	LDZ	[modetable]		; Send mouse mode character
+    	MOV	r16,r18
+    	LSR	r16
+    	LSR	r16
+    	LSR	r16
+    	LSR	r16
+    	ANDI	r16,0x7
+    	ADD	ZL,r16
+    	CLR	r16
+    	ADC	ZH,r16
+    	LPM	r19,Z
+    	RCALL	USART_write
+    	LDS	r16,mousemode2
+    	ANDI	r16,0x1F
+    	SBRC	r16,4			; Check if in prompt mode
+    	RJMP	isprompt
+    	LDZ	[reptable]		; Send current mouse report rate
+    	ADD	ZL,r16
+    	CLR	r16
+    	ADC	ZH,r16
+    	LPM	r19,Z
+    	RCALL	USART_write
+    	RJMP	USART_done
+    isprompt:
+	LDI	r19,'D'
 	RCALL	USART_write
 	RJMP	USART_done
-    sendmmstat:
-	LDI	r19,0b00001111
-	RJMP	USART_write
-    	RJMP	USART_done
-    sendmmdiag:
+    sendmmdiag:				; SummaMouse diagnostic (dummy)
     	BST	r19,0
 	BLD	r16,2
 	BST	r19,2
@@ -547,6 +597,7 @@ USART_recvfunc:
 	MOV	r0,r16
 	LDI	r18,3
 	RCALL	xmitpacket
+	RJMP	USART_done
     usemm:
     	RCALL	SetMMmode
 	RJMP	USART_done
@@ -559,6 +610,44 @@ USART_recvfunc:
     usemicrosoft:
     	RCALL	SetMSmode
 	RJMP	USART_done
+    recv_reqreport:			; Request report
+    	LDS	r19,mousemode2		; Set prompt mode flag
+    	SBR	r19,0x10
+    	STS	mousemode2,r19
+    	RCALL	sendevent		; Send mouse report
+    	RJMP	USART_done
+    recv_extchar:			; Sets extended command bit
+	SBR	r18,0x8
+	STS	mousemode,r18
+	RJMP	USART_done
+    recv_extcmd:			; Parse extended commands start here
+    	CBR	r18,0x8			; Clear special command bit
+	STS	mousemode,r18
+;	CPI	r16,'?'			; C7-M Detection (not reversed yet)
+;	BREQ	querymouse
+	CPI	r16,'n'			; Ignore invalid speeds
+	BRMI	recv_extbadspeed
+	CPI	r16,'q'+1
+	BRSH	recv_extbadspeed
+	MOV	r19,r16
+	SUBI	r19,'n'
+	RCALL	USART_setbaud		; Set new baud rate
+    recv_extbadspeed:
+	RJMP	USART_done
+;    querymouse:
+;	LDI	r19,'C'
+;	RCALL	USART_write
+;	LDI	r19,'7'
+;	RCALL	USART_write
+;	RJMP	USART_done
+    recv_setnewrate:			; Set new mouse rate
+    	LDS	r19,mousemode2		; Clear prompt mode flag and set
+    	ANDI	r19,~0x1F		; selected mouse report rate
+    	OR	r19,r18
+    	STS	mousemode2,r19
+	LPM	r19,Z			; Get mouse rate from table
+	STS	setrateval,r19		; Set it as desired mouse rate
+    	RJMP	USART_done
     USART_done:
 	POP	r19
 	POP	r18
@@ -569,7 +658,23 @@ USART_recvfunc:
 	RETI
 	; USART_recvfunc
 
-; Mouse rate table for mouse rate configuration
+; Decimal mouse mode to ASCII table
+;
+modetable:
+	.DB 'U','T'
+	.DB 'W','B'
+	.DB '?','S'
+	.DB 'A','V'
+
+; Decimal mouse report rate to ASCII table
+;
+reptable:
+	.DB 'J','K'
+	.DB 'L','R'	
+	.DB 'M','Q'
+	.DB 'N','O'
+	
+; Mouse rate command look-up table
 ;
 ratetable:
 	; command,rate
@@ -582,22 +687,21 @@ ratetable:
 	.DB	'N',200
 	.DB	0,0
 
-; Copyright (or rather copyleft) string... May require changing if MouseWare
-; drivers check this string
+; Copyright (or rather copyleft) text data
 ;
 copyright_str:
 	.DB	13,10
-	.DB	"COPYRIGHT (C) 1985 LOGITECH INC. C7 REVISION 3.0",0,0
-;	.DB	"LAMEMOUSECONVERTER V0.10B FOR CIRC. REV.1 "
-;	.DB	"BY JOHN ",0x22,"LAMEGUY",0x22," WILBERT VILLAMOR",13,10
-;	.DB	"2021 MEIDO-TEK KYS HARDWARE DIVISION",13,10
-;	.DB	"THERE NEEDS TO BE A FILTER AGAINST <PROJECTNAME>DEV HANDLES",13,10,0
+	.DB	"LAMEMOUSECONVERTER V0.12  "
+	.DB	"BY JOHN ",0x22,"LAMEGUY",0x22," WILBERT VILLAMOR",13,10
+	.DB	"2021-2022 MEIDO-TEK KYS TECH HARDWARE DIVISION",13,10
+	.DB     "RELEASED UNDER MPL V2 ",13,10
+	.DB	0x22,"THERE SHOULD BE FILTERS AGAINST <PROJECTNAME>-DEV TYPES",0x22,13,10,0
 
 ; Start of data segment
 ;
 .DSEG
 
-ps2_clkstack:	.BYTE 8			; Click event stack (FILO style)
+ps2_clkstack:	.BYTE 8			; Click event stack (FIFO style)
 ps2_clkhead:	.BYTE 1			; Stack head offset
 ps2_clktail:	.BYTE 1			; Stack tail offset
 ps2_clkcount:	.BYTE 1			; Stack count
@@ -608,10 +712,15 @@ ps2rec_maxpkt:	.BYTE 1			; PS/2 maximum packet length
 
 setrateval:	.BYTE 1			; Mouse rate change value
 
-mousemode:	.BYTE 1			; Mouse converter mode
-					;   bit0: Parse PS/2 stream
-					;   bit1: last middle mouse state
-					;   bit2: RTS last state
-					;   bit3: Reserved
+mousemode:	.BYTE 1			; Mouse mode
+					;   bit0  : Parse PS/2 stream
+					;   bit1  : Last middle mouse state
+					;   bit2  : RTS last state
+					;   bit3  : Extended command flag
 					;   bit4-6: Mouse protocol mode
-					;   bit7: Disable RTS detection
+					;   bit7  : Disable RTS detection
+					
+mousemode2:	.BYTE 1			; Mouse mode 2
+					;   bit0-3: Mouse report rate
+					;   bit4  : Prompt mode
+					;   bit5-7: Reserved

@@ -1,12 +1,11 @@
 EESchema Schematic File Version 4
-LIBS:Basic Schematic-cache
-EELAYER 26 0
+EELAYER 30 0
 EELAYER END
 $Descr A4 11693 8268
 encoding utf-8
 Sheet 1 1
 Title "LameMouseConverter Basic"
-Date "2021-08-28"
+Date "2022-04-09"
 Rev "1"
 Comp "Meido-Tek KYS Hardware Division (John \"Lameguy\" Wilbert Villamor)"
 Comment1 "This schematic is for reference purposes only for wiring the required support circuitry."
@@ -53,7 +52,7 @@ Wire Wire Line
 	4400 3400 4400 2500
 Wire Wire Line
 	4400 2500 4300 2500
-Text Label 3800 4000 0    50   ~ 0
+Text Label 3800 3900 0    50   ~ 0
 TTL_RX
 Text Label 3800 3600 0    50   ~ 0
 TTL_TX
@@ -186,8 +185,6 @@ F 3 "~" H 7950 3400 50  0001 C CNN
 	0    1    -1   0   
 $EndComp
 Wire Wire Line
-	7300 3100 8150 3100
-Wire Wire Line
 	7300 3400 7850 3400
 Wire Wire Line
 	8400 3100 8500 3100
@@ -241,47 +238,47 @@ NoConn ~ 2600 2600
 $Comp
 L Device:C_Small C2
 U 1 1 612AE7F7
-P 7100 1900
-F 0 "C2" H 7192 1946 50  0000 L CNN
-F 1 "100pf" H 7192 1855 50  0000 L CNN
-F 2 "" H 7100 1900 50  0001 C CNN
-F 3 "~" H 7100 1900 50  0001 C CNN
-	1    7100 1900
+P 7000 1900
+F 0 "C2" H 7092 1946 50  0000 L CNN
+F 1 "100pf" H 7092 1855 50  0000 L CNN
+F 2 "" H 7000 1900 50  0001 C CNN
+F 3 "~" H 7000 1900 50  0001 C CNN
+	1    7000 1900
 	1    0    0    -1  
 $EndComp
 $Comp
 L power:+5V #PWR06
 U 1 1 612AF533
-P 6900 1700
-F 0 "#PWR06" H 6900 1550 50  0001 C CNN
-F 1 "+5V" H 6915 1873 50  0000 C CNN
-F 2 "" H 6900 1700 50  0001 C CNN
-F 3 "" H 6900 1700 50  0001 C CNN
-	1    6900 1700
+P 6800 1700
+F 0 "#PWR06" H 6800 1550 50  0001 C CNN
+F 1 "+5V" H 6815 1873 50  0000 C CNN
+F 2 "" H 6800 1700 50  0001 C CNN
+F 3 "" H 6800 1700 50  0001 C CNN
+	1    6800 1700
 	1    0    0    -1  
 $EndComp
 $Comp
 L power:GND #PWR07
 U 1 1 612B0180
-P 7100 2150
-F 0 "#PWR07" H 7100 1900 50  0001 C CNN
-F 1 "GND" H 7105 1977 50  0000 C CNN
-F 2 "" H 7100 2150 50  0001 C CNN
-F 3 "" H 7100 2150 50  0001 C CNN
-	1    7100 2150
+P 7000 2150
+F 0 "#PWR07" H 7000 1900 50  0001 C CNN
+F 1 "GND" H 7005 1977 50  0000 C CNN
+F 2 "" H 7000 2150 50  0001 C CNN
+F 3 "" H 7000 2150 50  0001 C CNN
+	1    7000 2150
 	1    0    0    -1  
 $EndComp
 Wire Wire Line
-	7100 2150 7100 2000
+	7000 2150 7000 2000
 Wire Wire Line
-	7100 1800 6900 1800
+	7000 1800 6800 1800
 Wire Wire Line
-	6900 1800 6900 1700
+	6800 1800 6800 1700
 Wire Wire Line
-	6900 1800 6900 2300
-Connection ~ 6900 1800
+	6800 1800 6800 2300
+Connection ~ 6800 1800
 Wire Wire Line
-	6500 2300 6900 2300
+	6500 2300 6800 2300
 $Comp
 L Connector:DB9_Female J2
 U 1 1 612B3001
@@ -298,12 +295,6 @@ Wire Wire Line
 Wire Wire Line
 	7300 3600 9300 3600
 Wire Wire Line
-	9300 3700 7800 3700
-Wire Wire Line
-	7800 3700 7800 4200
-Wire Wire Line
-	7800 4200 7300 4200
-Wire Wire Line
 	7600 4000 7600 3800
 Wire Wire Line
 	7600 4000 7300 4000
@@ -315,15 +306,6 @@ Text Label 8550 3800 0    50   ~ 0
 RS232_TX
 Text Label 8550 3700 0    50   ~ 0
 RS232_RTS
-Text Label 8550 3900 0    50   ~ 0
-RS232_CTS
-Wire Wire Line
-	8150 3100 8150 3900
-Wire Wire Line
-	8150 3900 9300 3900
-Connection ~ 8150 3100
-Wire Wire Line
-	8150 3100 8200 3100
 $Comp
 L power:GND #PWR09
 U 1 1 612B7CF2
@@ -340,19 +322,16 @@ Wire Wire Line
 Wire Wire Line
 	9200 4200 9300 4200
 NoConn ~ 9300 4100
-NoConn ~ 9300 4000
-NoConn ~ 9300 3500
-NoConn ~ 9300 3400
 Wire Wire Line
 	3300 3700 3300 4200
 Wire Wire Line
 	3300 3700 3000 3700
 Wire Wire Line
-	3500 3000 3500 4000
+	3500 3000 3500 3900
 Wire Wire Line
-	3500 4000 4500 4000
+	3500 3900 4500 3900
 Wire Wire Line
-	3300 4200 5700 4200
+	3300 4200 4500 4200
 $Comp
 L power:GND #PWR05
 U 1 1 6129E132
@@ -373,19 +352,19 @@ Wire Wire Line
 $Comp
 L Device:Jumper_NC_Small JP1
 U 1 1 612A5054
-P 4600 4000
-F 0 "JP1" H 4600 4212 50  0000 C CNN
-F 1 "RX_TOGGLE" H 4600 4121 50  0000 C CNN
-F 2 "" H 4600 4000 50  0001 C CNN
-F 3 "~" H 4600 4000 50  0001 C CNN
-	1    4600 4000
+P 4600 3900
+F 0 "JP1" H 4600 4112 50  0000 C CNN
+F 1 "RX_EN" H 4600 4021 50  0000 C CNN
+F 2 "" H 4600 3900 50  0001 C CNN
+F 3 "~" H 4600 3900 50  0001 C CNN
+	1    4600 3900
 	1    0    0    -1  
 $EndComp
 $Comp
-L Device:Jumper_NO_Small JP2
+L Device:Jumper_NO_Small JP3
 U 1 1 612A7991
 P 4900 3300
-F 0 "JP2" H 4900 3485 50  0000 C CNN
+F 0 "JP3" H 4900 3485 50  0000 C CNN
 F 1 "AUTOBAUD" H 4900 3394 50  0000 C CNN
 F 2 "" H 4900 3300 50  0001 C CNN
 F 3 "~" H 4900 3300 50  0001 C CNN
@@ -395,16 +374,57 @@ $EndComp
 Wire Wire Line
 	3000 3400 4400 3400
 Wire Wire Line
-	5200 4000 5200 3300
-Connection ~ 5200 4000
+	5200 4000 5200 3900
 Wire Wire Line
 	5200 4000 5700 4000
 Wire Wire Line
-	4700 4000 5200 4000
+	4700 3900 5200 3900
 Wire Wire Line
 	3000 3000 3500 3000
 Wire Wire Line
 	3000 3300 4800 3300
 Wire Wire Line
 	5000 3300 5200 3300
+Connection ~ 5200 3900
+Wire Wire Line
+	5200 3900 5200 3300
+$Comp
+L Device:Jumper_NC_Small JP2
+U 1 1 62525233
+P 4600 4200
+F 0 "JP2" H 4600 4412 50  0000 C CNN
+F 1 "RTS_EN" H 4600 4321 50  0000 C CNN
+F 2 "" H 4600 4200 50  0001 C CNN
+F 3 "~" H 4600 4200 50  0001 C CNN
+	1    4600 4200
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	4700 4200 5700 4200
+Wire Wire Line
+	7300 3100 8200 3100
+Wire Wire Line
+	7450 4200 7450 3700
+Wire Wire Line
+	7450 4200 7300 4200
+Wire Wire Line
+	7450 3700 9300 3700
+Wire Wire Line
+	9300 3400 9200 3400
+Wire Wire Line
+	9200 3400 9200 3500
+Wire Wire Line
+	9200 4000 9300 4000
+Wire Wire Line
+	9300 3900 9200 3900
+Connection ~ 9200 3900
+Wire Wire Line
+	9200 3900 9200 4000
+Wire Wire Line
+	9200 3500 9300 3500
+Connection ~ 9200 3500
+Wire Wire Line
+	9200 3500 9200 3900
+Text Notes 4000 4500 0    50   ~ 0
+JP1=O JP2=S: Mouse Systems/Microsoft\nJP1=S JP2=O: Mouse Systems/C7
 $EndSCHEMATC

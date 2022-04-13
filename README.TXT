@@ -1,218 +1,490 @@
-LameMouseConverter by John "Lameguy" Villamor / Lameguy64
-Protected under Mozilla Public License v2
-2022 Meido-Tek KYS Hardware Division
-
-Introduction
-
-    The follow-up of Lameguy64's first attempt of a serial mouse converter;
-    ps2serial, the LameMouseConverter improves upon the original converter
-    project significantly. It not only addresses all the shortcomings of the
-    original ps2serial converter but also a much improved interface circuit
-    featuring a MAX232 level translator, improving compatibility with less
-    sensitive RS-232 interfaces and allows support for software based mouse
-    configuration.
-
-    The LameMouseConverter can be used to adapt any PS/2 mouse, ball or
-    optical, into a 3-button Mouse Systems or Microsoft compatible serial
-    mouse. Coupled with the baud rate and mouse rate configuration features
-    the conversion may become indistinguishable to a PS/2 mouse when using
-    a mouse driver that can utilize said serial mouse features.
+LameMouseConverter by John "Lameguy" Villamor (Lameguy64)
+Protected under the Mozilla Public License v2
+2022 Meido-Tek Productions "KYS" Hardware Division
 
 
-Features
+Table of Contents
 
-    - Uses PS/2 mouse streaming mode at 40Hz report rate, utilizing hardware
-      interrupts for handlding PS/2 data transfers which greatly improves
-      mouse compatibility and responsiveness. Mouse report rate can be
-      changed with software commands.
-      
-    - Supports Mouse Systems (known as 5 byte packed in MouseWare), Microsoft
-      3-button, SummaMouse MM Series and Logitech C7 Three Byte Packed protocol
-      modes. Protocol modes can be selected through software commands.
-      
-    - Supports software controlled baud rate configuration, mouse report rate
-      and mouse mode selection through software commands inherited from the
-      Logitech C7 mouse.
+  1. Introduction
+  2. Construction
+    2.1. Component List
+    2.2. Flashing the .HEX File
+    2.3. Construction Tips
+  3. Operation and Usage
+    3.1. Status Light
+    3.2. Configuring the LameMouseConverter
+  4. Software Configuration
+    4.1. Baud Rate Configuration  
+    4.2. Report Rate Configuration
+    4.3. Mouse Data Format Selection
+  5. Technical Commands
+    5.1. Status
+    5.2. Format and Firmware Revision
+    5.3. Format and Report Mode
+    5.4. Detecting the LameMouseConverter
+  6. Software Commands Summary
+  7. Mouse Data Formats
+    7.1. Three Byte Packed Format
+    7.2. Mouse Systems Compatible Format
+    7.3. Microsoft Compatible Format
+    7.4. SummaMouse MM Series Format
+  8. Logitech C-model and MouseWare Negotiation
+  9. Erratas and Workarounds
+  10. Credits and References
+
+
+1. Introduction
+
+    The LameMouseConverter by Lameguy64  is  the  definitive  follow-up of the
+    original ps2serial mouse  converter  originally  released in 2018 under an
+    open-source license, significantly  improving  upon  the original. Written
+    entirely in assembly  language  using  all-original  software routines, as
+    well as improved interfacing circuitry. The  LameMouseConverter offers the
+    most compatible and least latent  mouse  conversion solution possible that
+    any electronics tinkerer can produce at home.
     
-    - Firmware written entirely in AVR assembly. Uses no dependencies apart
-      from Atmel provided header files. Compatible with the open source AVRA
-      assembler.
+    The LameMouseConverter  is  an intelligent protocol conversion device that
+    takes input from a PS/2  pointing  device  and  relays  the data as serial
+    mouse inputs. It is intended  to  be used for older computer systems (such
+    as 486, 386 and older) that lack  hardware  support for PS/2 mice and sim-
+    ulates popular mouse protocols as Mouse Systems and Microsoft serial mice,
+    permitting  the  use  of  a  more  abundant  PS/2 mouse as a serial mouse.
+    The LameMouseConverter also provides  sufficient  simulation of a Logitech
+    C-model mouse providing improved  mouse performance nearly identical to an
+    actual PS/2 mouse when  configured  and  used  with  the appropriate mouse
+    driver software. The older 3-byte Mouse Systems protocol is also supported
+    by the mouse converter.
+    
+    Much of the PS/2 mouse processing  and protocol conversion is performed by
+    a single Atmel ATmega328P or 168P micro-controller operating at 16MHz pro-
+    vided by an Arduino board  or  a self-built  board. The converter firmware
+    uses streaming mode for  reading  input  data  from the PS/2 mouse with an
+    interrupt driven receive routine-  not  a  single  input  is missed by the
+    LameMouseConverter. The firmware also uses 16-bit accumulative counters to
+    track total mouse movement, in  addition  to buffered mouse clicks with an
+    eight-level FIFO to guarantee  every  click  is relayed to the host system
+    regardless of report rate and bandwidth differences between the PS/2 mouse
+    and serial interface.
 
 
-Component List
+2. Construction
 
-    1 x Arduino UNO R3 or ATmega328P and support circuitry required to run
-        the controller at 16MHz, whichever you find is most convenient.
+    The LameMouseConverter may  be  constructed  as  a relatively simple hobby
+    project, more-so if the  Arduino  platform  is used to provide the required
+    micro-controller. The PS/2  interface  is  simply  wired directly to their
+    respective I/O pins without any  additional components apart from the PS/2
+    connector and a small  capacitor  to  decouple the voltage supply from the
+    rest of the circuit. The RS-232 interface  circuit  is more involved as it
+    uses a MAX232 coupled with external  capacitors  for  the  internal charge
+    pump circuits, to translate  logic  levels  between RS-232 to TTL and vice
+    versa. RS-232 'shields' may  work  when  building the converter around the
+    Arduino platform, but  Microsoft  mouse  compatibility  is not possible if
+    the shield does not provide level translation of the RTS line.
+
+
+  2.1. Component List
+
+    1 x Arduino UNO R3 or bare ATmega328P and support circuitry for the micro-
+        controller to operate at 16MHz, whichever is most desired.
     1 x Maxim / Texas Instruments MAX232.
-    1 x 100pf bipolar ceramic capacitor (for decoupling MAX232).
+    1 x 100pf bipolar ceramic capacitor.
     4 x 16v 1uf polarized electrolytic capacitors (for MAX232).
+    1 x 16v 22uf polarized electrolytic capacitor (for decoupling PS/2 power).
     1 x DB9 female connector.
     1 x 6-pin mini-DIN female connector.
+    1 x Length of wire with four conductors. Solid core recommended.
+
+    The wiring schematics are  provided  as  a  stand-alone KiCad eeschema do-
+    cument and should be included with this repository.
+
+
+  2.2. Flashing the .HEX File
+
+    Arduino users should use 'avrdude'  normally  provided  in one of the bin
+    directories of the Arduino IDE distribution. Use  the sample command-line
+    to write the firmware to the  Arduino  board  and  make sure the COM port
+    number matches that of the Arduino board to be flashed.
     
-    For the wiring diagram a KiCad .sch file should be provided in the code
-    repository.
+    avrdude -patmega328p -carduino -D -P COM2 -U flash:w:PS2SER2.hex:i
+
+
+  2.3. Construction Tips
+  
+    If constructing the LameMouseConverter  using  the Arduino UNO prototyping
+    platform is most desired it  is recommended  to use any of the third-party
+    prototyping 'shield' boards that  comprises  primarily  of vias as it per-
+    mits mounting the mini-DIN connector directly onto the board, if the conn-
+    ector used is of the board-mounted type. The expanded soldering space also
+    simplifies mounting  of the DIP16  socket  for the MAX232 chip and suppor-
+    ting capacitors, while the RX and RTS  jumper  connections are optional if
+    hardware configuration for Microsoft or Mouse Systems/C-model operation is
+    desired, as the mouse converter supports  a software command to select the
+    latter mode if hardware jumpers are unavailable.
+    
+    The serial cable can be wired  directly  onto  the board around the MAX232
+    chip connecting to their respective  pins  and ground. The mouse converter
+    only needs four conductors for  TX, RX, RTS and Ground  while flow control
+    lines CTS and DSR can be asserted  by  simply connecting DTR back to those
+    lines on the connector itself. The loop-back is important for transmitting
+    software commands to the mouse using  operating system commands (ie. ECHO)
+    before loading the mouse driver,  otherwise  device errors will occur when
+    attempting to transmit commands to the device without the loop-back.
+    
+    The AUTOBAUD connection is a left-over from earlier plans to support auto-
+    matic baud rate detection specific to SummaGraphics MM series pointing de-
+    vices. This feature is not enabled by  default on on most Logitech C-model
+    pointing devices with the exception of the C7-SG, and the MouseWare driver
+    uses software polling to locate  the pointing  device instead of using the
+    automatic baud rate feature to synchronize to the peripheral as originally
+    believed. So the AUTOBAUD connection may be omitted entirely from the pro-
+    ject.
+    
+     
+3. Operation and Usage
+
+    The LameMouseConverter must be supplied  with at least 9v from an external
+    power supply as the serial port cannot provide sufficient current to run
+    both the micro-controller and the PS/2 device.
+
+
+  3.1. Status Light
+
+    Pin PB5 or the L13 LED  on  Arduino  boards  is  used as a status light to
+    indicate status or activity  of  the  LameMouseConverter. On power-up, the
+    status light blinks  once  to  indicate  successful  initialization. If no
+    PS/2 mouse is connected an initialization error is indicated by a flashing
+    status light. After  five  flashes the mouse converter repeats the process
+    until a PS/2 mouse has been detected and successfully initialized.
+    
+    Under normal operation the  status  light will flash briefly whenever the
+    mouse is manipulated to indicate  activity  as the mouse converter is re-
+    laying the input as a serial mouse  packet.  The duration is based on the
+    time taken to transmit the mouse packet through the serial interface.
     
 
-Operating Characteristics
+  3.2. Configuring the Mouse Converter
 
-    On power-up, the L13 LED (or pin PB5 on the ATmega controller) will blink
-    once to indicate successful initialization of the connected PS/2 mouse.
-    On failure the L13 LED will blink repeatedly to indicate a initialization
-    error. It is not recommended to connect a PS/2 mouse while the converter
-    is powered on as this tends to trip the brown-out detection feature of
-    the ATmega controller.
+    If constructed with jumpers the LameMouseConverter can be hard-wired to a
+    specific mouse protocol by preventing  the converter from sensing the RTS
+    line or receiving command bytes from the host system. The mouse converter
+    will always select Mouse Systems as  the initial protocol mode regardless
+    of the jumper settings.
     
-    Once powered up and initialized, the LameMouseConverter behaves as a
-    Mouse Systems compatible serial mouse initially. If the RTS pin is
-    toggled (ie. when a Microsoft or Logitech compatible mouse driver is
-    loaded) the converter will automatically switch to emulating a Microsoft
-    3-button serial mouse instead.
+    +------+------+---------------------------------------------+
+    | RTS  | RX   | Protocol                                    |
+    +------+------+---------------------------------------------+
+    | OFF  | OFF  | Mouse Systems only                          |
+    | ON   | OFF  | Mouse Systems or Microsoft compatible       |
+    | OFF  | ON   | Mouse Systems or C-model compatible         |
+    | ON   | ON   | Mouse Systems or Microsoft compatible*      |
+    +------+------+---------------------------------------------+
+    * Permits C-model commands to be used.
+    
+    The mouse converter properly  implements  the  'half-packet' format of the
+    five byte Mouse Systems protocol  and  smoother mouse movement will be ob-
+    served when using the original  Mouse Systems  driver  software. The  con-
+    verter only enters Microsoft protocol format if a RTS line toggle has been
+    detected.
+    
+    For a Logitech mouse driver to recognize  the mouse converter as a C-model
+    mouse the RTS jumper must be left open as the converter does not currently
+    implement the extra negotiation commands  employed on Microsoft compatible
+    C-model devices (ie. C7-M). The mouse  driver will recognize the converter
+    as a standard Microsoft  compatible  mouse  instead and enhanced features,
+    such as faster baud and report rates, will not be available.
+    
+    In case hardware jumpers are  not  available  the  LameMouseConverter also
+    provides a software based solution to bring the mouse converter to C-model
+    compatible mode by means of  a  software  command. Transmitting 'm' to the
+    mouse converter will  inhibit  RTS  detection  in  software and brings the
+    mouse converter to  C-model  compatible  mode.
 
-    Once a mouse driver is installed one may immediately find mouse input to
-    be a bit laggy with the converter, this is largely the result of the slow
-    transfer speed of 1200 baud serial adding a fair bit of latency as a
-    mouse packet is being transmitted to the host system. This becomes more
-    apparent when using a modern optical mouse as such input devices are
-    commonly associated with fast input reponses which exacerbates this side
-    effect of protocol conversion. Depending on the mouse driver used, mouse
-    inputs would be too sensitive when using an optical mouse that has a
-    considerably higher dpi resolution than ball mice.
-    
-    In both modes of operation the PS/2 mouse is configured for 40 reports
-    per second to match the report rate of serial mice, which have a typical
-    report at 40 to 44 reports per second due to bandwidth constraints of
-    1200 baud serial. As a MAX232 is used to translate TTL RS-232 levels to
-    standard levels and vice versa this allows the LameMouseConverter to
-    receive commands from the host system, using commands supported by the
-    Logitech Logimouse C7 which the mouse converter inherits. Only a subset
-    of the commands are supported however and is not yet tested with the
-    Logitech MouseWare drivers extensively, so the extended mouse features
-    may not be detected by the driver.
-    
-    
-Baud Rate Configuration
 
-    The baud rate at which mouse packets are transmitted can be configured
-    by sending a 2-byte command sequence to the converter at the same baud
-    rate mouse commands are received at. By default the serial parameters are
-    1200 baud, 7 data bits, 2 stop bits, no parity unless changed previously.
-    These parameters will work regardless of whether the converter is in
-    Mouse Systems or Microsoft mode as the firmware always ignores the 8th
-    bit for command bytes. Toggling the RTS pin can be used to bring the
-    converter to a known baud rate, as the baud rate is also reset to 1200
-    baud when switching to Microsoft compatible mode in response to the RTS
-    signal toggle. Using higher baud rates reduces mouse input latency.
+4. Software Configuration
+
+    The new RS-232 interface circuit  of  the  LameMouseConverter provides the
+    capability to receive data  bytes  from  the  host system  and permits the
+    implementation of software commands for configuring the converter. This is
+    typically accomplished by transmitting  command characters using operating
+    system commands such as ECHO and piping the output to a serial device such
+    as COM1 provided the RX jumper is set. This  only  works  if the loop-back
+    connections are wired on the RS-232 side.
+    
+    The initial line settings of the  LameMouseConverter  regardless of jumper
+    settings are 1200 baud, 8 data  bits, 1 stop  bit and no parity. The mouse
+    converter ignores frame and parity  errors  if line settings are incorrect
+    provided the baud rate matches, as  the  firmware only processes the first
+    seven bits of received  characters. So  transmitting  commands  with 7-bit 
+    characters will work. An example  to  send a command character from MS-DOS
+    to disable RTS detection is as follows:
+    
+    MODE COM1 BAUD=1200 DATA=8 PARITY=N STOP=1
+    ECHO m>COM1
+
+    Take note that some mouse settings,  such  as  baud and mouse report rate,
+    will be reverted to 1200 baud and  60 reports per second if the mouse con-
+    verter detects an RTS line toggle.
+
+
+  4.1. Baud Rate Configuration
+
+    The baud rate at which  mouse  packets  are  transmitted can be configured
+    by means of a two character command  sequence. Changing the baud rate man-
+    ually will not work if the mouse driver  software does not explicitly sup-
+    port or recognize higher baud rates. Using  higher baud rates not only re-
+    duces input latency but  also  provides  headroom  to support higher mouse
+    report rates or mickeys.
 
     Command     Baud Rate
 
       *n        1200
-
       *o        2400
-
       *p        4800
-
       *q        9600
+        
     
-    When writing a mouse driver, it is best to check if Logitech extended
-    mouse commands are supported by sending a 'f' character to the mouse,
-    which in turn should report with a format and revision number byte. If
-    the mouse does not report a response byte back then it likely does not
-    support the Logitech extended mouse commands.
-    
-    
-Mouse Report Rate Configuration
+  4.2. Report Rate Configuration
 
-    In addition to adjusting the baud rate, the mouse report rate can also be
-    adjusted to take advantage of the increased serial bandwidth. the mouse
-    converter can be configured to report mouse events at select rates from
-    10 reports all the way up to 200 reports per second.
+    The mouse report rate  can  also  be  configured  to utilize the increased
+    bandwidth of higher baud rate settings. The  mouse converter can be set to
+    report mouse events  at  select  rates  from 10 to 200 reports per second.
+    The report rate is governed by  the  PS/2 mouse itself and not on the con-
+    verter and as the PS/2 mouse  protocol  only  supports set values, the in-
+    tended rates from  the C7  specifications  are  rounded  up to the nearest
+    value supported by the PS/2 mouse. The  table  that follows lists the com-
+    mand characters, the intended and the actual report rate selected:
     
-    The actual mouse report rate is governed by the PS/2 mouse itself and not
-    on the LameMouseConverter. If the mouse rate exceeds the rate at which the
-    current baud rate can support, mouse movement coordinates are accumulated
-    onto internal counters and button clicks are buffered to make sure rapid
-    mouse clicks are not missed. However, this tends to exhibit a jello-like
-    effect in mouse motions.
-
-    The following table lists the supported mouse rates and the command byte
-    to select it. As the mouse rate is handled by the PS/2 mouse the actual
-    mouse report rates are substituted to the closest compatible mouse rate
-    instead for compatibility reasons.
-
     Command     Intended Rate   Actual Rate
 
       J           10              10
-
       K           20              20
-
       L           35              40
-
       R           50              40
-
       M           60              60
-
       Q           100             100
-
       N           150             200
+    
+    Take note that the higher report rates  are  only effective if the current
+    baud rate setting can provide the  bandwidth  to support the rate of mouse
+    packets specified. To avoid  the  potential  for lost inputs regardless of
+    bandwidth constraints, the  mouse  converter  employs  16-bit accumulative
+    counters for each motion axis and an eight-level FIFO for buffering button
+    presses. The result is an effective  pull-down of mouse inputs, however it
+    introduces latent inputs which can be observed by the user as a 'jello' or
+    'rubber-banding' effect.
+    
+    The following table lists the estimated maximum report rates supported for
+    each baud rate and mouse format  setting.  The  original C7 and compatible
+    devices two stop bits  while  the  LameMouseConverter  only employs one to
+    attain the most optimal throughput possible.
+    
+    Baud Rate    Est. Max Rate    Est. Max Rate    Est. Max Rate   
+                 (Microsoft)      (Mouse Systems)  (MM Series/C-model)
+
+      1200         44               40             36            
+      2400         88               80             73
+      4800         177              160            145
+      9600         355              320            290
+
+    The maximums are calculated  using  the  following formulas with start and
+    stop bits accounted for,  as  well  as  the  parity  bit for the MM series 
+    packet format:
+   
+      Microsoft         ( baud rate / 9 ) / 3 = max rate
+      Mouse Systems     ( baud rate / 10 ) / 5 * (5 / 3) = max rate
+      MM Series         ( baud rate / 11 ) / 3 = max rate
+
+    Take note that the mouse report  rate  is  also reverted to 60 reports per
+    second if an RTS line toggle was detected.
 
 
-    The following table describes the estimated maximum mouse rates for each
-    of the available baud rate options. The mouse rate selected must be equal
-    or less than what the baud rate can support.
+  4.3. Mouse Data Format Selection
 
-    Baud Rate   Est. Max Rate   Est. Max Rate*
-                (Microsoft)     (Mouse Systems)
+    On some situations it may  be  necessary  to configure the mouse to a spe-
+    cific mouse protocol prior to loading the mouse driver software or a mouse
+    compatible software program that does  not interface the mouse through the
+    standard mouse interfaces. One  such  case  is  selecting  the  Three Byte
+    Packed mouse format to use the mouse  converter on systems that expect the
+    old Mouse Systems format, also known as the Sun mouse format, as the mouse
+    converter has no means to automatically  detect when this protocol mode is
+    most appropriate for the host system.
+    
+    The appropriate data format can  be  selected  manually by means of trans-
+    mitting the  appropriate  character  command  to  the  mouse  converter as
+    follows. Only the most commonly used protocol formats are implemented:
+    
+    Command     Hex Digit   Description
 
-      1200        44          40
-
-      2400        88          80
-
-      4800        177         160
-
-      9600        355         320
-
-      * With a mouse driver that handles Mouse Systems properly.
-
-    The estimated mouse rate are determined using the formula
-    ( baud rate / 9 ) / 3 for Microsoft protocol and
-    ( baud rate / 10 ) / 5 * 1.666666666666667 for Mouse Systems protocol.
-    The multiply is to account the fact that Mouse Systems packets actually
-    consist of 'one and a half' mouse events, with the second set of movement
-    coordinates reporting how much the mouse has moved while the first half
-    of the packet is being transmitted. The mouse converter handles this
-    aspect properly.
+      S           53h       SummaMouse MM Series format (C-model native)
+      T           54h       Three Byte Packed format (old Mouse Systems/Sun)
+      U           55h       Mouse Systems compatible format
+      V           56h       Microsoft compatible format
 
 
-Mouse Modes and Packet Formats
+5. Technical Commands
 
-    The LameMouseConverter supports three protocol formats; the Three Byte
-    Packed format, Mouse Systems compatible format, the Microsoft compatible
-    format and the three byte packed format. Each of the protocol formats can
-    be selected through software commands, or the RTS toggle for Microsoft
-    compatible.
+    The following details explained  in  this  section are intended for driver
+    software developers who wish to implement support for the C-model features
+    of the LameMouseConverter.
 
-    Three Byte Packed Format (command: 'T')
 
-      The following table describes the packet format of the Three Byte
-      Packed mode. Packets are reported at 1200 baud (unless changed),
-      8 data bits, 1 stop bit and no parity. Mouse button bits are set when
-      pressed and movement values are positive right, positive down as signed
-      two's complement values.
+  5.1. Status
+  
+    The LameMouseConverter and C-model pointing devices supports the MM Series
+    status command character 't'. Both  devices  will  return a status byte of
+    the following format:
+    
+      b7  b6  b5  b4  b3  b2  b1  b0
+      ------------------------------    
+       0  pm   0   0   1   1   1   1
+       
+    Only bit 6 is relevant for the LameMouseConverter:
+    
+      pm = 0      Prompt mode disabled (incremental stream mode).
+      pm = 1      Prompt mode enabled
+      
+    The remaining bits report a healthy SummaMouse.
+
+
+  5.2. Format and Firmware Revision
+  
+    The LameMouseConverter and C-model  pointing devices will return a format
+    and revision byte in response to the command character 'f'. The format of
+    the byte obtained is as follows:
+    
+      b7  b6  b5  b4  b3  b2  b1  b0
+      ------------------------------
+      rv3 rv2 rv1 rv0 fm2 fm1 fm0  0
+
+    The fm bits form a decimal value of the current mouse format:
+    
+    Number      Format
+    
+      0           Mouse Systems compatible format
+      1           Three Byte Packed format (old Mouse Systems/Sun)
+      5           SummaMouse MM Series compatible format
+      7           Microsoft compatible format
+
+    The rv bits form a decimal value of 1, which  corresponds  to firmware 3.0
+    on the Logitech MouseWare driver.
+
+  
+  5.3. Format and Report Mode
+  
+    The LameMouseConverter and  C-model  devices  return  two ASCII characters
+    of the current format  and  report  mode  in  response  to the 't' command
+    character. This is also the only  command  that  returns the current mouse
+    report mode. The first character returned specifies the mouse format:
+    
+    Character   Hex Digit   Description
+    
+      S           53h       SummaMouse MM Series format
+      T           54h       Three Byte Packed format (old Mouse Systems/Sun)
+      U           55h       Mouse Systems compatible format
+      V           56h       Microsoft compatible format
+      
+    The second character specifies the report mode:
+      
+    Character   Hex Digit   Description
+    
+      J           4Ah       10 reports per second incremental streaming
+      K           4Bh       20 reports per second incremental streaming
+      L           4Ch       40 reports per second incremental streaming
+      R           52h       40 reports per second incremental streaming
+      M           4Dh       60 reports per second incremental streaming
+      Q           51h       100 reports per second incremental streaming
+      N           4Eh       200 reports per second incremental streaming
+      D           44h       Prompt mode
+      
+    Conversely the returned characters  are also command characters and can be
+    transmitted back to the LameMouseConverter.
+
+
+  5.4. Detecting the LameMouseConverter
+
+    Before using any of the extended mouse command supported, detection of the
+    LameMouseConverter should first be  performed using the status (s) command
+    at 1200 baud. If no response is returned transmit the same command at 2400
+    baud, then 4800 and 9600 until  one  of  the baud rates yields a response.
+    A delay of at least 100ms must be placed between each probe attempt. If no
+    response is obtained from all the baud rates repeat the process on another
+    port, otherwise presume the device as a Microsoft (confirm with a RTS tog-
+    gle) or a Mouse Systems device.
+    
+    After successful probing the mouse  converter  may then be negotiated to a
+    desired baud rate and confirm the new  rate  by  transmitting a status (s)
+    command at the negotiated baud rate.  From  there the desired mouse format
+    and report rate can be  issued,  the  new  settings  of  which can be con-
+    firmed using the format and report mode (t) command.
+
+
+6. Software Commands Summary
+
+    The following is a summary of the  extended  mouse command characters sup-
+    ported by the LameMouseConverter. These commands may be used to pre-confi-
+    gure the mouse converter to specific  settings  using the method described
+    in "Software Configuration".
+    
+    Command     Hex Digit   Description
+
+      D           44h       Set prompt mode (disables incremental streaming)
+      P           50h       Request mouse report and enters prompt mode
+      J           4Ah       Set 10 reports per second incremental streaming
+      K           4Bh       Set 20 reports per second incremental streaming
+      L           4Ch       Set 40 reports per second incremental streaming
+      R           52h       Set 40 reports per second incremental streaming
+      M           4Dh       Set 60 reports per second incremental streaming
+      Q           51h       Set 100 reports per second incremental streaming
+      N           4Eh       Set 200 reports per second incremental streaming
+      S           53h       Set SummaMouse MM Series format
+      T           54h       Set Three Byte Packed format (old Mouse Systems)
+      U           55h       Set Mouse Systems compatible format
+      V           56h       Set Microsoft compatible format
+      c           63h       Get copyright info string
+      k           6Bh       Get number of mouse keys (buttons)
+      s           73h       Get SummaMouse status
+      t           74h       Get current format and report mode
+      f           66h       Get format and revision byte
+      m           6Dh       Software disable RTS detection (C7 mode)*
+      *n          6Eh       Set 1200 baud rate
+      *o          6Fh       Set 2400 baud rate
+      *p          70h       Set 4800 baud rate
+      *q          71h       Set 9600 baud rate
+
+      * LameMouseConverter specific command.
+
+
+7. Mouse Data Formats
+
+    The LameMouseConverter  supports  four  protocol  formats; the  Three Byte
+    Packed format (old Mouse Systems/Sun),  Mouse Systems  compatible  format,
+    the Microsoft compatible format and  the SummaMouse MM Series format. Each
+    of the protocol formats can be  selected  using  software commands, or the
+    RTS toggle to invoke automatic  configuration  to the Microsoft compatible
+    format.
+
+  7.1. Three Byte Packed Format (command: 'T')
+
+    The Three Byte Packed format resembling the old Mouse Systems or Sun mouse
+    protocol is comprised of  three  8-bit  bytes  transmitted at 8 data bits,
+    1 stop bit and no parity. The data format is described as follows.
 
       Byte b7  b6  b5  b4  b3  b2  b1  b0
       -----------------------------------    
        1st  0   0   0   0   0  LB  MB  RB
        2nd x7  x6  x5  x4  x3  x2  x1  x0
        3rd y7  y6  y5  y5  y3  y2  y1  y0
+       
+       LB,MB,RB    Button state (1 = pressed)
+       x0-x7       X motion as signed two's complement (-128 to 127).
+       y0-y7       Y motion as signed two's complement (-128 to 127).
 
 
-    Mouse Systems Compatible Format (command: 'U')
+  7.2. Mouse Systems Compatible Format (command: 'U')
 
-      The following table describes the packet format of the Mouse Systems
-      compatible mode. Packets are reported at 1200 baud (unless changed),
-      8 data bits, 1 stop bit and no parity. Mouse button bits are clear when
-      pressed and movement values are positive right, negative down as signed
-      two's complement values.
+    The following table describes the data format of the Mouse Systems
+    compatible format. Packets are reported at 1200 baud, 8 data bits,
+    1 stop bit and no parity.
 
       Byte b7  b6  b5  b4  b3  b2  b1  b0
       -----------------------------------    
@@ -221,21 +493,26 @@ Mouse Modes and Packet Formats
        3rd y7  y6  y5  y5  y3  y2  y1  y0
        4th x7  x6  x5  x4  x3  x2  x1  x0
        5th y7  y6  y5  y5  y3  y2  y1  y0
+       
+       LB,MB,RB    Button state (0 =  pressed)
+       x0-x7       X motion as signed two's complement (-128 to 127).
+       y0-y7       Y motion as signed two's complement (-128 to 127).
 
-      The 4th and 5th bytes are not a duplicate, but rather a "half packet"
-      of the amount the mouse has moved while the first half of the packet
-      was being transmitted. A properly written Mouse Systems driver must
-      interpret this second half as another mouse event if the coordinates
-      are non-zero.
+    The 4th and 5th bytes are not a  duplicate, but rather a "half packet" of
+    of the amount the mouse has moved  during  the  transmission of the first
+    three bytes. A properly written  Mouse Systems driver must interpret this
+    second half as another mouse  movement  event if the coordinates are non-
+    zero for smoother continuous motion.
 
 
-    Microsoft Compatible Format (send 'V' or toggle RTS)
+  7.3. Microsoft Compatible Format (command: 'V' or toggle RTS)
 
-      The following table describes the packet format of the Microsoft
-      compatible mode. Packets are reported at 1200 baud (unless changed),
-      7 data bits, 1 stop bit and no parity. Mouse button bits are set when
-      pressed and mouse movement values are positive right, positive down as
-      signed 8-bit values.
+    The following table  describes  the  packet  format of the Microsoft com-
+    patible format. Packets are  reported  at  1200 baud, 7 data bits, 1 stop
+    bit and no parity. Middle button  is  supported  by means of transmitting
+    the mouse packet with zero motion values, but the mouse button states are
+    kept from the last packet. A compatible  mouse driver will interpret this
+    packet as a middle button 'toggle'.
 
       Byte b6  b5  b4  b3  b2  b1  b0
       -------------------------------
@@ -243,116 +520,122 @@ Mouse Modes and Packet Formats
        2nd  0  x5  x4  x3  x2  x1  x0
        3rd  0  y5  y5  y3  y2  y1  y0
 
-      Unique to the LameMouseConverter compared to the reference Logitech
-      Logimouse C7 is middle button support for Microsoft format mode. The
-      middle button is reported as a "toggle" by reporting a duplicate of the
-      last mouse button states with zero movement, which should be impossible
-      to transmit on a well programmed mouse controller. Compatible drivers
-      will interpret this as a toggle of a middle button press, while older
-      drivers that only support two buttons will simply do nothing.
+       LB,MB,RB    Button state (1 =  pressed)
+       x0-x7       X motion as signed two's complement (-128 to 127).
+       y0-y7       Y motion as signed two's complement (-128 to 127).
 
 
-    SummaMouse MM Series Format (send 'S')
+  7.4. SummaMouse MM Series Format (command: 'S')
 
-      The following table describes the packet format of the MM Series
-      compatible mode format as used by SummaGraphics SummaMouse products
-      and the Logitech C7's preferred format when used with the official
-      MouseWare driver. Packets are reported at 2400 baud (unless changed),
-      8 data bits, 1 stop bit and odd parity.
+    The following table  describes  the  packet  format  of the MM Series com-
+    patible format as used  by  SummaGraphics MM Series  products. Packets are
+    typically reported at 2400 baud, 8 data bits, 1 stop bit and odd parity.
 
       Byte b7  b6  b5  b4  b3  b2  b1  b0
       ----------------------------------- 
-       1st  1   0   0  Sx  Sy   L   M   R
+       1st  1   0   0  Sx  Sy  LB  MB  RB
        2nd  0  x6  x5  x4  x3  x2  x1  x0
        3rd  0  y6  y5  y4  y3  y2  y1  y0
+       
+       LB,MB,RB    Button state (1 =  pressed)
+       Sx,Sy       Positive flag of each axis (0 = negative, 1 = positive)
+       x0-x6       X movement amount as unsigned (0 to 127)
+       x0-y6       Y movement amount as unsigned (0 to 127)
 
-      The motion values are 7-bit unsigned values and negative values are
-      not reported in complementary format. Instead the sign bits (Sx, Sy)
-      indicate if the unsigned value should be treated as a positive (1)
-      or negative (0) value.
+     The Sx and Sy bits are not sign  values,  but  rather a flag whether the
+     motion values should be treated as a positive value or a negative value.
 
-      
-    Logitech (aka. Microsoft Plus) Format (to be supported soon)
+
+8. Logitech C-model and MouseWare Negotiation
+
+  8.1. MS-DOS Driver Negotiation
+  
+    The first detection phase consists of  the RTS line toggle used for Micro-
+    soft compatible serial mice. In this phase the MouseWare driver configures
+    the serial port to 1200 baud, 8 data bits, odd parity and 2 stop bits. The
+    driver ignores parity and  frame  errors so that line settings, apart from
+    baud rate, do not matter and the  emulated  mouse should also do the same.
+    The sequence starts with  asserting  the  RTS  line for at least 550ms and
+    then toggled for 650ms. If  the  Microsoft  response character (M) was not
+    received within 500ms the driver enters the C-model detection phase.
     
-      The Logitech format is identical to the Microsoft format, only an
-      additional byte is reported whenever the middle button is pressed or
-      held down. Because of the additional byte the mouse report rate is
-      reduced on slower baud rates whenever the middle button is held down.
-      
-      The Logitech Extended Microsoft Format is identified by receiving
-      characters 'M3' after toggling the RTS line.
-
-      Byte b6  b5  b4  b3  b2  b1  b0
-      -------------------------------
-       1st  1  LB  RB  y7  y6  x7  x6
-       2nd  0  x5  x4  x3  x2  x1  x0
-       3rd  0  y5  y5  y3  y2  y1  y0
-       4th  0  MB   0   0   0   0   0
-
-
-Supported Mouse Commands Summary
-
-    The following commands are derived from the Logitech Logimouse C7 mouse.
-    Only a subset of the commands are implemented and the Logitech MouseWare
-    drivers may not be able to recognize the extended mouse features as a
-    result, moreso if they check the copyright string or misc commands not
-    yet supported.
-
-    Command     Hex Digit   Description
-
-      J           4Ah       Set mouse to 10 reports per second
-
-      K           4Bh       Set mouse to 20 reports per second
-
-      L           4Ch       Set mouse to 40 reports per second
-
-      R           52h       Set mouse to 40 reports per second
-
-      M           4Dh       Set mouse to 60 reports per second
-
-      Q           51h       Set mouse to 100 reports per second
-
-      N           4Eh       Set mouse to 200 reports per second
-      
-      S           53h       Set SummaMouse MM Series mode
-
-      T           54h       Set Three Byte Packed mode (old Mouse Systems)
-
-      U           55h       Set Mouse Systems compatible mode
-
-      V           56h       Set Microsoft compatible mode
-
-      t           74h       Get current mode and revision number in hex
-
-      f           66h       Get current mode and revision number byte
-      
-      c           63h       Get copyright and revision string
-
-      m           6Dh       Force Mouse Systems and disables RTS detection*
-
-      *n          6Eh       Set 1200 baud rate
-
-      *o          6Fh       Set 2400 baud rate
-
-      *p          70h       Set 4800 baud rate
-
-      *q          71h       Set 9600 baud rate
-
-      * LameMouseConverter specific command.
+    If the Microsoft response  character  was  received the driver attempts an
+    extra negotiation using the extended command '*?'. If no valid response is
+    returned the MouseWare driver will deduce the device as a Microsoft compa-
+    tible serial mouse. The correct response  for the '*?' command and further
+    negotiation is not yet known as  this  appears to be supported only on the
+    C7-M and other Microsoft-compatible C-model pointing devices, as these de-
+    tails were observed from a regular C7 and does not support the extra nego-
+    tiation command.
     
-    MODE and ECHO commands may be used to send the above commands to
-    configure the mouse before loading a mouse driver. (ie. send 'm' to force
-    Mouse Systems). The command bytes may be sent at 1200 baud, 7 data bits
-    and 2 stop bits so that the mouse converter can receive the command bytes
-    regardless of frame size (the 8th bit is ignored).
+    In the C-model detection phase the  MouseWare  driver probes for a C-model
+    mouse by transmitting a  status  command  (s)  at least twice if the first
+    command did not receive  a  response  within  80ms. If no response was re-
+    ceived after both attempts the  driver  attempts to transmit the same com-
+    mand at 2400 baud, then 4800 baud and  finally 9600 baud with a 80ms delay
+    in each attempt, as the C-model mouse can either be hard-wired or software
+    configured to a specific baud rate.  If  the driver is still unable to de-
+    tect a C-model mouse on all  baud  rates  it  then performs the entire de-
+    tection sequence again on another serial port and will display an error if
+    no mouse is detected on  that  port  either.  If  the  driver successfully
+    obtains the status byte it then proceeds to the setup phase.
     
-    In order for piping to COMx devices to work properly the CTS and DSR pins
-    must be held high from pin 2 of the MAX232 chip, otherwise MS-DOS will
-    throw a write error when trying to send command bytes using ECHO and
-    piping the output to COMx.
+    In the setup phase the MouseWare driver  transmits the prompt mode command
+    (D) and waits for at least 90ms. It  then  transmits  a string of commands
+    consisting of MM Series  format  (S),  150 reports per second (N) additio-
+    nally disabling prompt mode, and  2400 baud mode (*o). The driver then re-
+    configures the serial port  to  2400  baud  and  waits for at least 120ms,
+    after which the MouseWare  driver  transmits  the keys command (k) and the
+    response must be an ASCII decimal  value  of the number of buttons suppor-
+    ted (ie. '2' or '3'). The driver then waits another 80ms and transmits the
+    format and revision command (f), the  response  of  which must be a binary
+    byte of the current mouse format  and  firmware  revision. The driver then
+    transmits the 150 reports per second (N) command once more.
+    
+    If the above sequence  has  been  satisfied  the  MouseWare  driver should
+    recognize the device as a  C-model  mouse  indicated  by a C in a bracket.
+    Enhanced mouse features such as  higher  baud and report rate settings are
+    now applicable.
+    
+    To summarize, the following criteria must be met as a minimum:
+    
+    * No response should be given after the RTS toggle.
+    * Respond with a status byte for the status (s) command.
+    * Implement the MM Series format (S) command.
+    * Implement the baud rate selection commands (*o).
+    * Respond with an ASCII number for the keys (k) command.
+    * Respond with a format and revision byte for the format (f) command.
 
 
-Credits & References
+  8.2. Windows 3.1 Driver Negotiation
+
+    The Windows driver performs  mouse  detection and setup more or less iden-
+    tically to the MS-DOS driver,  with  the  only  major difference being the
+    C-model detection phase. The Windows driver probes for the mouse using the
+    the prompt mode (D) and status (s) commands together. The status byte must
+    report the prompt mode status correctly, otherwise the Windows driver will
+    not recognize the mouse and  continues  to  attempt detection at different 
+    baud and serial ports. The setup phase after successful detection is most-
+    ly identical to the MS-DOS driver only without the keys (k) and format (f)
+    commands.
+    
+  
+9. Known Erratas and Workarounds
+
+  9.1. Windows 95/98 Logitech Serial Mouse Driver Workaround (0.12)
+  
+    When using the LameMouseConverter under Windows 95/98  using  the included
+    Logitech Serial Mouse driver, mouse  movements may behave erratically with
+    random button presses. This  is  because  the  mouse  driver transmits the
+    MM Series format command after switching to 2400 baud mode which the mouse
+    converter was unable to receive successfully  possibly due to insufficient
+    delays. The simplest workaround is to use  the  ECHO  command  to transmit
+    the  MM Series format command  (S) to  the  mouse converter, preferably by
+    placing it in the AUTOEXEC.BAT file.  Loading  the MS-DOS MouseWare driver
+    as part of the AUTOEXEC.BAT sequence also remedies this issue.
+
+
+10. Credits & References
 
     AVR firmware & schematic: John "Lameguy" Wilbert Villamor (Lameguy64)
 

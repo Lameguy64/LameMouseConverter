@@ -68,14 +68,7 @@
 ; Reminder: MM packets must be sent at 8 data bits, 1 stop, odd parity
 ;
 sendpacketMM:
-	CLI
-	CAPTO8	[r20,r22:r23]		; Cap mouse movements to 8-bit signed
-	CAPTO8	[r21,r24:r25]
-	CLR	r22			; Clear coordinates once latched
-	CLR	r23			; (does not have the 'jello' effect)
-	CLR	r24
-	CLR	r25
-	SEI
+	RCALL	getcappedvels		; Get mouse movements capped to 8-bit
 	CLR	r16			; Setup button bits
 	BST	r19,0
 	BLD	r16,2
@@ -83,12 +76,12 @@ sendpacketMM:
 	BLD	r16,1
 	BST	r19,1
 	BLD	r16,0
+	NEG	r20			; Invert X
 	BST	r20,7			; Transfer sign bits
 	BLD	r16,4
 	BST	r21,7
 	BLD	r16,3
-	LDI	r17,0b10011000		; Invert bits
-	EOR	r16,r17
+	SBR	r16,(1<<7)		; Set packet start bit
 	SBRC	r20,7			; Perform ABS on movement coords
 	NEG	r20
 	SBRC	r21,7
@@ -104,14 +97,7 @@ sendpacketMM:
 ; sendpacketTBP - Transmits a Three Byte Packed mouse packet
 ;
 sendpacketTBP:
-	CLI
-	CAPTO8	[r20,r22:r23]		; Cap mouse movements to 8-bit signed
-	CAPTO8	[r21,r24:r25]
-	CLR	r22			; Clear coordinates once latched
-	CLR	r23			; (does not have the 'jello' effect)
-	CLR	r24
-	CLR	r25
-	SEI
+	RCALL	getcappedvels		; Get mouse movements capped to 8-bit
 	CLR	r16
 	BST	r19,0
 	BLD	r16,2
@@ -137,15 +123,9 @@ sendpacketTBP:
 ;	r24:r25	Accumulated Y movement (16-bit signed two's complement)
 ;
 sendpacketMSYS:
-	CLI
-	CAPTO8	[r20,r22:r23]		; Cap mouse movements to 8-bit signed
-	CAPTO8	[r21,r24:r25]
-	CLR	r22			; Clear coordinates once latched
-	CLR	r23			; (does not have the 'jello' effect)
-	CLR	r24
-	CLR	r25
-	SEI
+	RCALL	getcappedvels		; Get mouse movements capped to 8-bit
 	NEG	r21
+	
 	CLR	r16			; Construct the first half of packet
 	BST	r19,0
 	BLD	r16,2
@@ -161,15 +141,10 @@ sendpacketMSYS:
 	MOV	r2,r21
 	LDI	r18,3			; Transmit the first half of packet
 	RCALL	xmitpacket
-	CLI				; Transmit second half
-	CAPTO8	[r20,r22:r23]
-	CAPTO8	[r21,r24:r25]
-	CLR	r22
-	CLR	r23
-	CLR	r24
-	CLR	r25
-	SEI
+	
+	RCALL	getcappedvels		; Transmit second half
 	NEG	r21
+	
 	MOV	r0,r20
 	MOV	r1,r21
 	LDI	r18,2
@@ -187,14 +162,7 @@ sendpacketMSYS:
 ;	r24:r25	Accumulated Y movement (16-bit signed two's complement)
 ;
 sendpacketMS:
-	CLI
-	CAPTO8	[r20,r22:r23]		; Cap mouse movements to 8-bit signed
-	CAPTO8	[r21,r24:r25]
-	CLR	r22			; Clear coordinates once latched
-	CLR	r23			; (does not have the 'jello' effect)
-	CLR	r24
-	CLR	r25
-	SEI
+	RCALL	getcappedvels
 	CLR	r17
 	BST	r19,2			; Get middle button bit
 	BLD	r17,1			; Store to bit 1
@@ -251,7 +219,34 @@ sendpacketMS:
     skippkt:
 	RET
 	; sendpacketMS
+
+; getcappedvels - Obtain velocities with cap to 8-bit signed two's complement
+;
+; Arguments:
+;	r22:r23	Signed 16-bit X movement velocity
+;	r24:r25	Signed 16-bit Y movement velocity
+;
+; Return values:
+;	r20	X movement velocity capped to -128 to +128
+;	r21	Y movement velocity capped to -128 to +128
+;
+getcappedvels:
+	CLI
+	CAPTO8	[r20,r22:r23]		; Cap mouse movements to 8-bit signed
+	CAPTO8	[r21,r24:r25]
+	CLR	r22			; Clear coordinates once latched
+	CLR	r23			; (does not have the 'jello' effect)
+	CLR	r24
+	CLR	r25
+	SEI
+	RET
+	; getcappedvels
 	
+; xmitpacket - Transmits mouse packet stored in register file (r0 to r31)
+;
+; Arguments:
+;	r18	Number of bytes to transmit
+;	
 xmitpacket:
 	PUSH	r19
     	CLR	XH			; Transmit the mouse packet
