@@ -391,8 +391,7 @@ ps2_int:
     xminus:
     	NEG	r9			; Invert value for negative arithmetic
 	SUB	r22,r9
-	CLR	r9
-	SBC	r23,r9
+	SBCI	r23,0
     xdone:
 	SBRS	r8,5			; Check Y sign bit
 	RJMP	yminus			; Y axis is inverted from PS/2 mouse
@@ -403,8 +402,7 @@ ps2_int:
 	RJMP	ydone
     yminus:
 	SUB	r24,r10
-	CLR	r10
-	SBC	r25,r10
+	SBCI	r25,0
     ydone:
 	MOV	r17,r8
 	ANDI	r17,0x7			; Keep only first three bits for btns

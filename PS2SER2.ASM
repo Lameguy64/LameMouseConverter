@@ -9,6 +9,12 @@
 ;
 ; Changelog:
 ;
+;   May 2022:
+;     * Version 1.13.
+;     * Fixed typo in CAPTO8 macro causing it to produce a faulty result
+;       if value of r23 is positive, causing mouse movement jumps in
+;       specific movement conditions.
+;
 ;   April 11, 2022:
 ;     * Version 1.12.
 ;     * Fixed SummaMouse status command ('s') causing stack corruption.
@@ -691,7 +697,7 @@ ratetable:
 ;
 copyright_str:
 	.DB	13,10
-	.DB	"LAMEMOUSECONVERTER V0.12  "
+	.DB	"LAMEMOUSECONVERTER V0.13  "
 	.DB	"BY JOHN ",0x22,"LAMEGUY",0x22," WILBERT VILLAMOR",13,10
 	.DB	"2021-2022 MEIDO-TEK KYS TECH HARDWARE DIVISION",13,10
 	.DB     "RELEASED UNDER MPL V2 ",13,10

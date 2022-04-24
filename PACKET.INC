@@ -35,7 +35,7 @@
 	POP	r16
 	RJMP	capdone_%	
     nonegcap_%:
-	CPI	r23,0
+	CPI	@2,0
 	BRMI	capdone_%
 	BRNE	docap_%
 	CPI	@1,0x7F
