@@ -6,31 +6,33 @@ Protected under the Mozilla Public License v2
 Table of Contents
 
   1. Introduction
-  2. Construction
-    2.1. Component List
-    2.2. Flashing the .HEX File
-    2.3. Construction Tips
-  3. Operation and Usage
-    3.1. Status Light
-    3.2. Configuring the LameMouseConverter
-  4. Software Configuration
-    4.1. Baud Rate Configuration  
-    4.2. Report Rate Configuration
-    4.3. Mouse Data Format Selection
-  5. Technical Commands
-    5.1. Status
-    5.2. Format and Firmware Revision
-    5.3. Format and Report Mode
-    5.4. Detecting the LameMouseConverter
-  6. Software Commands Summary
-  7. Mouse Data Formats
-    7.1. Three Byte Packed Format
-    7.2. Mouse Systems Compatible Format
-    7.3. Microsoft Compatible Format
-    7.4. SummaMouse MM Series Format
-  8. Logitech C-model and MouseWare Negotiation
-  9. Erratas and Workarounds
-  10. Credits and References
+  2. New in Version 1.14
+  3. Construction
+    3.1. Component List
+    3.2. Flashing the .HEX File
+    3.3. Construction Tips
+  4. Operation and Usage
+    4.1. Status Light
+    4.2. Configuring the LameMouseConverter
+  5. Software Configuration
+    5.1. Baud Rate Configuration  
+    5.2. Report Rate Configuration
+    5.3. Mouse Data Format Selection
+  6. Technical Commands
+    6.1. Status
+    6.2. Format and Firmware Revision
+    6.3. Format and Report Mode
+    6.4. Detecting the LameMouseConverter
+  7. Software Commands Summary
+  8. Mouse Data Formats
+    8.1. Three Byte Packed Format
+    8.2. Mouse Systems Compatible Format
+    8.3. Microsoft Compatible Format
+    8.4. SummaMouse MM Series Format
+    8.5. Quadrature Mouse
+  9. Logitech C-model and MouseWare Negotiation
+  10. Erratas and Workarounds
+  11. Credits and References
 
 
 1. Introduction
@@ -39,38 +41,58 @@ Table of Contents
     original ps2serial mouse  converter  originally  released in 2018 under an
     open-source license, significantly  improving  upon  the original. Written
     entirely in assembly  language  using  all-original  software routines, as
-    well as improved interfacing circuitry. The  LameMouseConverter offers the
+    well as improved interfacing circuitry, the  LameMouseConverter offers the
     most compatible and least latent  mouse  conversion solution possible that
     any electronics tinkerer can produce at home.
     
-    The LameMouseConverter  is  an intelligent protocol conversion device that
-    takes input from a PS/2  pointing  device  and  relays  the data as serial
-    mouse inputs. It is intended  to  be used for older computer systems (such
-    as 486, 386 and older) that lack  hardware  support for PS/2 mice and sim-
-    ulates popular mouse protocols as Mouse Systems and Microsoft serial mice,
-    permitting  the  use  of  a  more  abundant  PS/2 mouse as a serial mouse.
+    The LameMouseConverter is an 'intelligent' protocol conversion device that
+    takes input data from a PS/2 pointing device and relays it as serial mouse
+    inputs, intended  to be used with older computer systems (such as 486, 386
+    and older that lack native hardware  support  for  PS/2 mice and simulates
+    most popular mouse protocols  as  Mouse Systems and Microsoft serial mice.
     The LameMouseConverter also provides  sufficient  simulation of a Logitech
-    C-model mouse providing improved  mouse performance nearly identical to an
-    actual PS/2 mouse when  configured  and  used  with  the appropriate mouse
-    driver software. The older 3-byte Mouse Systems protocol is also supported
-    by the mouse converter.
+    C-model mouse providing improved mouse performance nearly matching that of
+    an actual PS/2 mouse, when configured and  used with the appropriate mouse
+    driver software.  The supposed older 3-byte Mouse Systems protocol for use
+    with Sun workstations is also supported in addition to quadrature mice.
     
     Much of the PS/2 mouse processing  and protocol conversion is performed by
-    a single Atmel ATmega328P or 168P micro-controller operating at 16MHz pro-
-    vided by an Arduino board  or  a self-built  board. The converter firmware
-    uses streaming mode for  reading  input  data  from the PS/2 mouse with an
-    interrupt driven receive routine-  not  a  single  input  is missed by the
-    LameMouseConverter. The firmware also uses 16-bit accumulative counters to
-    track total mouse movement, in  addition  to buffered mouse clicks with an
-    eight-level FIFO to guarantee  every  click  is relayed to the host system
-    regardless of report rate and bandwidth differences between the PS/2 mouse
-    and serial interface.
+    a single  Microchip/Atmel ATmega328P or 168P micro-controller operating at
+    16MHz by an Arduino compatible board or a self-built board.  The converter
+    firmware utilizes PS/2 streaming mode for reading input data from the PS/2
+    mouse with an interrupt driven handling routine-  not a single mouse input
+    is missed by the LameMouseConverter. The firmware also uses 16-bit accumu-
+    lative counters to track total mouse movement,  in  addition  to  buffered
+    mouse clicks using an eight-level  internal FIFO to guarantee every button
+    input is delivered to the host system  regardless of report rate and band-
+    width differences between the PS/2 mouse and serial interface.
 
 
-2. Construction
+2. What's new
+
+    Version 1.14 adds 2-button  quadrature  mouse  simulation for use with any
+    quadrature based  mouse  interfaces  such  Microsoft InPort, Bus Mouse and
+    Amiga mouse to name a few.  The  quadrature  mouse  simulation function is
+    always active  and  inputs  are  relayed  within  the PS/2 mouse interrupt
+    handler- yielding even less input latency than serial. Both interfaces can
+    be used simultaneously with two completely separate host systems.
+    
+    Another addition is the  implementation  of  a  watchdog timer to ensure a
+    continuously  operating  mouse  converter  in the event of a very rare but
+    still possible firmware lock-up.  The mouse converter will self-reset when
+    such a lock-up occurs and mouse parameters such as format, baud and report
+    rates are preserved after this reset.  However,  this feature may not work
+    properly as it was never properly tested due  to  AVR bootloaders clearing
+    the watchdog reset bit, and flashing without a bootloader was not possible
+    due to inadequate equipment in the development of this release. This reset
+    condition is not induced when  the  PS/2 mouse  is  disconnected while the
+    mouse converter is still operating.
+
+
+3. Construction
 
     The LameMouseConverter may  be  constructed  as  a relatively simple hobby
-    project, more-so if the  Arduino  platform  is used to provide the required
+    project, more-so if the  Arduino  platform is used to provide the required
     micro-controller. The PS/2  interface  is  simply  wired directly to their
     respective I/O pins without any  additional components apart from the PS/2
     connector and a small  capacitor  to  decouple the voltage supply from the
@@ -82,7 +104,7 @@ Table of Contents
     the shield does not provide level translation of the RTS line.
 
 
-  2.1. Component List
+  3.1. Component List
 
     1 x Arduino UNO R3 or bare ATmega328P and support circuitry for the micro-
         controller to operate at 16MHz, whichever is most desired.
@@ -98,7 +120,7 @@ Table of Contents
     cument and should be included with this repository.
 
 
-  2.2. Flashing the .HEX File
+  3.2. Flashing the .HEX File
 
     Arduino users should use 'avrdude'  normally  provided  in one of the bin
     directories of the Arduino IDE distribution. Use  the sample command-line
@@ -108,7 +130,7 @@ Table of Contents
     avrdude -patmega328p -carduino -D -P COM2 -U flash:w:PS2SER2.hex:i
 
 
-  2.3. Construction Tips
+  3.3. Construction Tips
   
     If constructing the LameMouseConverter  using  the Arduino UNO prototyping
     platform is most desired it  is recommended  to use any of the third-party
@@ -138,16 +160,24 @@ Table of Contents
     automatic baud rate feature to synchronize to the peripheral as originally
     believed. So the AUTOBAUD connection may be omitted entirely from the pro-
     ject.
+
+    When wiring for the quadrature pins as described by pin definitions in the
+    LMC.ASM file be sure that the pin assigned by QS_* is driven high when the
+    mouse converter is connected as a quadrature mouse.  This signals the con-
+    verter firmware to configure  the  PS/2 mouse with a report rate of 200Hz,
+    which is the preferred  report  rate  for  quadrature simulation. If mouse
+    movement is inverted  on  one  of  the  axis'  simply  swap the quadrature
+    signal pins around.
     
      
-3. Operation and Usage
+4. Operation and Usage
 
     The LameMouseConverter must be supplied  with at least 9v from an external
     power supply as the serial port cannot provide sufficient current to run
     both the micro-controller and the PS/2 device.
 
 
-  3.1. Status Light
+  4.1. Status Light
 
     Pin PB5 or the L13 LED  on  Arduino  boards  is  used as a status light to
     indicate status or activity  of  the  LameMouseConverter. On power-up, the
@@ -162,7 +192,7 @@ Table of Contents
     time taken to transmit the mouse packet through the serial interface.
     
 
-  3.2. Configuring the Mouse Converter
+  4.2. Configuring the Mouse Converter
 
     If constructed with jumpers the LameMouseConverter can be hard-wired to a
     specific mouse protocol by preventing  the converter from sensing the RTS
@@ -200,7 +230,7 @@ Table of Contents
     mouse converter to  C-model  compatible  mode.
 
 
-4. Software Configuration
+5. Software Configuration
 
     The new RS-232 interface circuit  of  the  LameMouseConverter provides the
     capability to receive data  bytes  from  the  host system  and permits the
@@ -226,7 +256,7 @@ Table of Contents
     verter detects an RTS line toggle.
 
 
-  4.1. Baud Rate Configuration
+  5.1. Baud Rate Configuration
 
     The baud rate at which  mouse  packets  are  transmitted can be configured
     by means of a two character command  sequence. Changing the baud rate man-
@@ -243,7 +273,7 @@ Table of Contents
       *q        9600
         
     
-  4.2. Report Rate Configuration
+  5.2. Report Rate Configuration
 
     The mouse report rate  can  also  be  configured  to utilize the increased
     bandwidth of higher baud rate settings. The  mouse converter can be set to
@@ -298,7 +328,7 @@ Table of Contents
     second if an RTS line toggle was detected.
 
 
-  4.3. Mouse Data Format Selection
+  5.3. Mouse Data Format Selection
 
     On some situations it may  be  necessary  to configure the mouse to a spe-
     cific mouse protocol prior to loading the mouse driver software or a mouse
@@ -321,14 +351,14 @@ Table of Contents
       V           56h       Microsoft compatible format
 
 
-5. Technical Commands
+6. Technical Commands
 
     The following details explained  in  this  section are intended for driver
     software developers who wish to implement support for the C-model features
     of the LameMouseConverter.
 
 
-  5.1. Status
+  6.1. Status
   
     The LameMouseConverter and C-model pointing devices supports the MM Series
     status command character 't'. Both  devices  will  return a status byte of
@@ -346,7 +376,7 @@ Table of Contents
     The remaining bits report a healthy SummaMouse.
 
 
-  5.2. Format and Firmware Revision
+  6.2. Format and Firmware Revision
   
     The LameMouseConverter and C-model  pointing devices will return a format
     and revision byte in response to the command character 'f'. The format of
@@ -369,7 +399,7 @@ Table of Contents
     on the Logitech MouseWare driver.
 
   
-  5.3. Format and Report Mode
+  6.3. Format and Report Mode
   
     The LameMouseConverter and  C-model  devices  return  two ASCII characters
     of the current format  and  report  mode  in  response  to the 't' command
@@ -400,7 +430,7 @@ Table of Contents
     transmitted back to the LameMouseConverter.
 
 
-  5.4. Detecting the LameMouseConverter
+  6.4. Detecting the LameMouseConverter
 
     Before using any of the extended mouse command supported, detection of the
     LameMouseConverter should first be  performed using the status (s) command
@@ -418,7 +448,7 @@ Table of Contents
     firmed using the format and report mode (t) command.
 
 
-6. Software Commands Summary
+7. Software Commands Summary
 
     The following is a summary of the  extended  mouse command characters sup-
     ported by the LameMouseConverter. These commands may be used to pre-confi-
@@ -454,7 +484,7 @@ Table of Contents
       * LameMouseConverter specific command.
 
 
-7. Mouse Data Formats
+8. Mouse Data Formats
 
     The LameMouseConverter  supports  four  protocol  formats; the  Three Byte
     Packed format (old Mouse Systems/Sun),  Mouse Systems  compatible  format,
@@ -463,7 +493,7 @@ Table of Contents
     RTS toggle to invoke automatic  configuration  to the Microsoft compatible
     format.
 
-  7.1. Three Byte Packed Format (command: 'T')
+  8.1. Three Byte Packed Format (command: 'T')
 
     The Three Byte Packed format resembling the old Mouse Systems or Sun mouse
     protocol is comprised of  three  8-bit  bytes  transmitted at 8 data bits,
@@ -480,7 +510,7 @@ Table of Contents
        y0-y7       Y motion as signed two's complement (-128 to 127).
 
 
-  7.2. Mouse Systems Compatible Format (command: 'U')
+  8.2. Mouse Systems Compatible Format (command: 'U')
 
     The following table describes the data format of the Mouse Systems
     compatible format. Packets are reported at 1200 baud, 8 data bits,
@@ -505,7 +535,7 @@ Table of Contents
     zero for smoother continuous motion.
 
 
-  7.3. Microsoft Compatible Format (command: 'V' or toggle RTS)
+  8.3. Microsoft Compatible Format (command: 'V' or toggle RTS)
 
     The following table  describes  the  packet  format of the Microsoft com-
     patible format. Packets are  reported  at  1200 baud, 7 data bits, 1 stop
@@ -525,7 +555,7 @@ Table of Contents
        y0-y7       Y motion as signed two's complement (-128 to 127).
 
 
-  7.4. SummaMouse MM Series Format (command: 'S')
+  8.4. SummaMouse MM Series Format (command: 'S')
 
     The following table  describes  the  packet  format  of the MM Series com-
     patible format as used  by  SummaGraphics MM Series  products. Packets are
@@ -546,9 +576,33 @@ Table of Contents
      motion values should be treated as a positive value or a negative value.
 
 
-8. Logitech C-model and MouseWare Negotiation
+  8.5. Quadrature Mouse
 
-  8.1. MS-DOS Driver Negotiation
+     While not necessarily a protocol it  is a signalling scheme that was used
+     for pointing devices.  A quadrature mouse  is  nothing more but a pair of
+     rotary encoders connected directly  to  the mouse port of a computer with
+     schmitt-triggers in between to 'square out'  the  signals from the photo-
+     transistors.  Essentially the mouse controller is inside the computer in-
+     stead of the mouse itself. The buttons are merely pull-down switches.
+
+     Quadrature signals are simulated by the mouse converter as follows.  Keep
+     note that the mouse converter performs  two quadrature steps as otherwise
+     mouse movements would be registered too slow.
+
+       Signal >0 >1 >2 >3
+       -------------------
+        A      0  1  1  0
+        B      0  0  1  1
+
+       Signal <0 <1 <2 <3
+       -------------------
+        A      0  0  1  1
+        B      0  1  1  0
+
+
+9. Logitech C-model and MouseWare Negotiation
+
+  9.1. MS-DOS Driver Negotiation
   
     The first detection phase consists of  the RTS line toggle used for Micro-
     soft compatible serial mice. In this phase the MouseWare driver configures
@@ -607,7 +661,7 @@ Table of Contents
     * Respond with a format and revision byte for the format (f) command.
 
 
-  8.2. Windows 3.1 Driver Negotiation
+  9.2. Windows 3.1 Driver Negotiation
 
     The Windows driver performs  mouse  detection and setup more or less iden-
     tically to the MS-DOS driver,  with  the  only  major difference being the
@@ -620,9 +674,9 @@ Table of Contents
     commands.
     
   
-9. Known Erratas and Workarounds
+10. Known Erratas and Workarounds
 
-  9.1. Windows 95/98 Logitech Serial Mouse Driver Workaround (0.12)
+  10.1. Windows 95/98 Logitech Serial Mouse Driver Workaround (0.12)
   
     When using the LameMouseConverter under Windows 95/98  using  the included
     Logitech Serial Mouse driver, mouse  movements may behave erratically with
@@ -635,7 +689,7 @@ Table of Contents
     as part of the AUTOEXEC.BAT sequence also remedies this issue.
 
 
-10. Credits & References
+11. Credits & References
 
     AVR firmware & schematic: John "Lameguy" Wilbert Villamor (Lameguy64)
 

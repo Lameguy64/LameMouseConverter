@@ -33,9 +33,10 @@ USART_init:
 ; Returns:
 ;   None
 ;
-; Destroys: r19, Z
+; Destroys: Z
 ;
 USART_setbaud:
+	PUSH	r19
 	PUSH	r16
 	PUSH	r17
 	LDI	ZL,LOW(USART_baudtbl<<1)   ; Get address of baud rate table
@@ -50,6 +51,7 @@ USART_setbaud:
 	STS	UBRR0L,r16
 	POP	r17
 	POP	r16
+	POP	r19
 	RET
 	; USART_setbaud
 	
@@ -146,6 +148,7 @@ USART_writestrZ:
     USART_writeloopZ:
 	LPM     r19, Z+			; Get byte
 	AND     r19, r19		; Check if zero terminator
+	WDR
 	BREQ    USART_writeendZ
 	RCALL   USART_write		; Send the byte
 	RJMP    USART_writeloopZ

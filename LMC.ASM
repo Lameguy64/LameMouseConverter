@@ -1,19 +1,29 @@
-; PS2SER2.ASM - AVR firmware for the LameMouseConverter (V0.12)
+; LMC.ASM - LameMouseConverter AVR firmware
 ; 2021-2022 John "Lameguy" Wilbert Villamor of Meido-Tek KYS Hardware Division
 ;
 ; Assembler: AVRA (1.4.2)
 ;
 ; Controller: ATmega328P @ 16MHz (or Arduino UNO R3 @ 16MHz)
 ; Can be made to work on smaller controllers with some modifications provided
-; one USART and one hardware INT pin is present.
+; a hardware USART and at least one hardware INT pin is available.
 ;
 ; Changelog:
 ;
-;   May 2022:
+;   May 21, 2022:
+;     * Added quadrature mouse emulation (always active).
+;     * Renamed main assembler file from 'PS2SER2.ASM' to 'LMC.ASM'.
+;     * Implemented watchdog timer. Not guaranteed if WDT reset preserves
+;       mouse settings as bootloaders clear the MCUSR register and was
+;       unable to test without a bootloader.
+;     * Small restructuring of PS2MOUSE.INC for increased flexibility.
+;     * Replaced JMP with RJMPs on reset/interrupt vector table.
+;     * Driving the quadrature sense pin sets mouse report rate to 200Hz.
+;
+;   April 24, 2022:
 ;     * Version 1.13.
-;     * Fixed typo in CAPTO8 macro causing it to produce a faulty result
-;       if value of r23 is positive, causing mouse movement jumps in
-;       specific movement conditions.
+;     * Fixed typo in CAPTO8 macro causing faulty results if value of r23 is
+;       positive, resulting in mouse movement jumps during specific movement
+;       conditions.
 ;
 ;   April 11, 2022:
 ;     * Version 1.12.
@@ -26,9 +36,9 @@
 ;     * Works with Logitech MouseWare drivers if RTS disconnected (C7 mode).
 ;     * Added prompt mode ('D') command. Inhibits mouse packet transmission.
 ;     * Updated SummaMouse status command ('s') to report prompt mode status
-;       (required for Windows MouseWare driver).
-;     * Fixed mouse rate commands interpreted during extended mouse command
-;       sequence.
+;       (required by Windows MouseWare driver).
+;     * Fixed mouse rate commands being interpreted during extended mouse
+;       command sequence.
 ;     * Added report request command ('P') for prompt mode.
 ;     * Optimized code size.
 ;
@@ -41,19 +51,19 @@
 ;     * Initial Version.
 ;
 ; Todo:
-; * Add Watchdog Timer in case the converter enters a deadlock state.
 ; * Add Logitech 3-button protocol, possibly with wheel.
 ; * Compatibility for smaller ATmega controllers.
-; * Bus mouse or quadrature support, preferably as a separate .ASM program.
 ;
 .NOLIST
 .INCLUDE "m328Pdef.inc" 
 .LIST
 
+;
 ; Initial PS/2 mouse rate
 ;
 .EQU PS2_RATE	= 60
 
+;
 ; Mouse mode definitions (derived from the Logimouse C7)
 ;
 .EQU MODE_MSYS	= 0			; Mouse Systems
@@ -65,11 +75,13 @@
 .EQU MODE_PADA	= 6			; Bit Pad One Absolute (unsupported)   
 .EQU MODE_MS	= 7			; Microsoft mouse
 
+;
 ; Revision number to report on format and revision byte
 ;
 .EQU REPORT_REV	= 1			; Revision 3.0 C7
 
-; Port and pin assignments for PS/2 interface
+;
+; Port and pin assignments for PS/2 mouse interface
 ;
 .EQU PS2_PORT	= PORTD
 .EQU PS2_DIR	= DDRD
@@ -77,6 +89,7 @@
 .EQU PS2_CLK	= PD2			; Must always be pin 2 of PORTD
 .EQU PS2_DAT	= PD4
 
+;
 ; Port and pin assignments for RS-232 RTS input
 ;
 .EQU RTS_PORT	= PORTD
@@ -84,11 +97,44 @@
 .EQU RTS_IN	= PIND
 .EQU RTS_PIN	= PD7
 
+;
 ; Port and pin assignment for status LED output (usually L13)
 ;
 .EQU L13_PORT	= PORTB
 .EQU L13_DIR	= DDRB
 .EQU L13_PIN	= PB5
+
+;
+; Port and pin assignments for quadrature mouse sense pin
+;
+.EQU QS_PORT	= PORTB
+.EQU QS_DDR	= DDRB
+.EQU QS_INP	= PIND
+.EQU QS_PIN	= PB4
+
+;
+; Port and pin assignments for XA,XB quadrature outputs
+;
+.EQU QX_PORT	= PORTB
+.EQU QX_DDR	= DDRB
+.EQU QXA_PIN	= PB0
+.EQU QXB_PIN	= PB1
+
+;
+; Port and pin assignments for YA,YB quadrature outputs
+;
+.EQU QY_PORT	= PORTB
+.EQU QY_DDR	= DDRB
+.EQU QYA_PIN	= PB2
+.EQU QYB_PIN	= PB3
+
+;
+; Port and pin assignments for button outputs (open collector)
+;
+.EQU QB_PORT	= PORTD
+.EQU QB_DDR	= DDRD
+.EQU QBL_PIN	= PD5
+.EQU QBR_PIN	= PD6
 
 ;
 ; Macro definitions section
@@ -108,6 +154,7 @@
 	LDI     ZH,HIGH(@0<<1)
 .ENDMACRO
 
+;
 ; Clock line control macros
 ;
 .MACRO CLK_LOW				; Drag CLK pin low
@@ -128,6 +175,7 @@
 	OUT	PS2_PORT,r16
 .ENDMACRO
 
+;
 ; Data line control macros
 ;
 .MACRO DAT_LOW				; Drag DAT pin low
@@ -148,6 +196,7 @@
 	OUT	PS2_PORT,r16
 .ENDMACRO
 
+;
 ; Delay macros (roughly tuned for 16MHz)
 ;
 .MACRO delay300us			; Delay ~300us
@@ -174,12 +223,12 @@
 ;
 ; Interrupt vector table
 ;
-.ORG 0x0000				; Reset vector
-	JMP	reset
+.ORG 0x0000				; reset vector
+	RJMP	reset
 .ORG 0x0002				; Interrupt 0 request
-	JMP	ps2_int
+	RJMP	ps2_int
 .ORG 0x0024				; USART receive
-	JMP     USART_recvfunc
+	RJMP     USART_recvfunc
 ;
 ; Begin of program code
 ;	
@@ -202,6 +251,10 @@ reset:
 	LDI     r29,HIGH(RAMEND)
 	OUT     SPL,r28
 	OUT     SPH,r29
+	IN	r19,MCUSR		; Read, store then clear MCU reset bits
+	STS	resetbits,r19
+	CLR	r19
+	OUT	MCUSR,r19
 	IN	r16,PS2_DIR		; Set CLK and DAT pins as input
 	CBR	r16,(1<<PS2_CLK)|(1<<PS2_DAT)
 	OUT	PS2_DIR,r16
@@ -217,6 +270,30 @@ reset:
 	CLR	r16			; Not required, but clear the flag
 	SBR	r16,(1<<INTF0)		; bit just in case
 	OUT	EIFR,r16
+	IN	r16,QX_DDR		; Configure quadrature outputs
+	SBR	r16,(1<<QXA_PIN)|(1<<QXB_PIN)
+	OUT	QX_DDR,r16
+	IN	r16,QX_PORT
+	CBR	r16,(1<<QXA_PIN)|(1<<QXB_PIN)
+	OUT	QX_PORT,r16
+	IN	r16,QY_DDR
+	SBR	r16,(1<<QYA_PIN)|(1<<QYB_PIN)
+	OUT	QY_DDR,r16
+	IN	r16,QY_PORT
+	CBR	r16,(1<<QYA_PIN)|(1<<QYB_PIN)
+	OUT	QY_PORT,r16
+	IN	r16,QB_DDR		; Configure button outputs
+	CBR	r16,(1<<QBL_PIN)|(1<<QBR_PIN)
+	OUT	QB_DDR,r16
+	IN	r16,QB_PORT
+	CBR	r16,(1<<QBL_PIN)|(1<<QBR_PIN)
+	OUT	QB_PORT,r16
+	IN	r16,QS_DDR		; Setup quadrature sense input
+	CBR	r16,(1<<QS_PIN)
+	OUT	QS_DDR,r16
+	IN	r16,QS_PORT		; Make sure pull-up is disabled
+	CBR	r16,(1<<QS_PIN)
+	OUT	QS_PORT,r16
 	IN	r16,RTS_DIR		; Configure RTS input
 	CBR	r16,(1<<RTS_PIN)
 	OUT	RTS_DIR,r16
@@ -230,15 +307,31 @@ reset:
 	LDI	r19,0			; Set initial baud rate (1200)
 	RCALL	USART_setbaud
 	RCALL	ps2_flushbuff		; Reset recv buffer
+	WDR				; Setup watchdog timer
+	LDI	r16,(1<<WDCE)|(1<<WDE)
+	STS	WDTCSR,r16
+	LDI	r16,(1<<WDE)|(1<<WDP2)|(1<<WDP1)
+	STS	WDTCSR,r16
+	LDS	r19,resetbits		; Check if watchdog reset occurred
+	ANDI	r19,(1<<WDRF)
+	BRNE	noclearmode		; Don't clear settings on WDT reset
+	LDI	r19,3
+	STS	mousemode2,r19
+	LDI	r19,PS2_RATE
+	STS	setrateval,r19
 	CLR	r16
+	STS	quadcount,r16
+	LDI	r19,0b0100
+	STS	linesetup,r19
+	RJMP	cleardone
+    noclearmode:
+	RJMP	noclearmode
+    cleardone:
 	STS	ps2_clkhead,r16
 	STS	ps2_clktail,r16
 	STS	ps2_clkcount,r16
 	STS	ps2_lastclk,r16
 	STS	mousemode,r16
-	STS	setrateval,r16
-	LDI	r19,3
-	STS	mousemode2,r19
 	CLR	r20			; Wait 100ms to let things settle
 	LDI	r19,100
 	RCALL	delayms
@@ -255,16 +348,70 @@ main:
 	IN	r16,L13_PORT		; Turn on status LED
 	SBR	r16,(1<<L13_PIN)
 	OUT	L13_PORT,r16
-	CLR	r20			; Blink L13
+	CLR	r20			; Flash L13
 	LDI	r19,100
 	RCALL	delayms
 	IN	r16,L13_PORT		; Turn off status LED
 	CBR	r16,(1<<L13_PIN)
 	OUT	L13_PORT,r16
 	WDR
-	RCALL	ps2_enable		; Enable mouse (starts streaming)
-	RCALL	SetMSYSmode		; Set Mouse Systems as initial mode
+	; Following code is left commented here for possible future use
+;	LDI	r19,PS2_MODE_REMOTE	; Set mouse to remote mode to obtain
+;	RCALL	ps2_setmode		; the state of the buttons at power-on
+;	LDS	r16,ps2rec_maxpkt
+;	PUSH	r16
+;	LDI	r16,5			; Set packet length to 5 bytes
+;	STS	ps2rec_maxpkt,r16
+;	CLI
+;	LDI	r19,0xEB		; Get a report
+;	RCALL	ps2_write
+;	SEI
+;	CLR	r20			; Delay 100ms
+;	LDI	r19,0x64
+;	RCALL	delayms
+;    	RCALL	ps2_read		; Get response
+;    	BRTS	noreport
+;    	CPI	r16,0xFA
+;    	BRNE	noreport
+;	RCALL	ps2_read		; Get button states
+;	MOV	r18,r16
+;    noreport:
+;    	POP	r16			; Revert last packet length
+;	STS	ps2rec_maxpkt,r16
+	;
+	LDS	r19,resetbits		; Check if watchdog reset occurred
+	ANDI	r19,(1<<WDRF)
+	BREQ	notwdtinit
+	LDS	r18,linesetup		; Restore last line settings
+	MOV	r19,r18			; Baud rate
+	ANDI	r19,0x3
+	RCALL	USART_setbaud
+	MOV	r19,r18			; Word size
+	LSR	r19
+	LSR	r19
+	ANDI	r19,1
+	RCALL	USART_setbits
+	ANDI	r19,0b1000		; Parity
+	BREQ	noparity
+	LDI	r19,3
+	RCALL	USART_setparity
+    noparity:
+	LDS	r19,mouserate		; Use last mouse rate setting
+	RJMP	setinitrate
+    notwdtinit:
+	IN	r16,QS_INP		; Set 200Hz mouse report rate if
+	LDI	r19,PS2_RATE		; quadrature sense pin is driven high,
+	SBRC	r16,QS_PIN		; otherwise use default rate
+	LDI	r19,200
+    setinitrate:
+    	RCALL	ps2_setrate		; Set initial mouse rate
+    	RCALL	ps2_flushbuff		; Set streaming mode
+	LDI	r19,PS2_MODE_STREAM
+	RCALL	ps2_setmode
+	RCALL	ps2_enable		; Start streaming
+	RCALL	SetMSYSmode		; Set Mouse Systems as initial protocol
     idleloop:
+    	WDR
     	LDS	r16,mousemode		; Skip RTS cycle check if forced to
 	ANDI	r16,0x80		; Mouse Systems mode
 	BRNE	skip_rts
@@ -285,8 +432,8 @@ main:
     	LDS	r16,mousemode2		; Prompt mode inhibits mouse reports
     	SBRC	r16,4
     	RJMP	idleloop
-	LDS	r16,setrateval		; Check if mouse rate needs updating
-	AND	r16,r16
+	LDS	r19,setrateval		; Check if mouse rate needs updating
+	AND	r19,r19
 	BRNE	dochangerate
     	LDS	r16,ps2_clkcount	; Check for any click events
 	AND	r16,r16
@@ -299,29 +446,10 @@ main:
 	BRNE	hasevent
 	RJMP	idleloop
     hasevent:
-	RCALL	sendevent
+	RCALL	sendevent		; Transmit mouse event
 	RJMP	idleloop		; Return to idle loop
     dochangerate:
-    	RCALL	ps2_flushbuff
-	LDI	r17,5			; Retry attempts +1
-    changerate_retry:
-	DEC	r17			; Skip mouse rate when all attempts
-	BREQ	changerate_done		; has failed
-    	CLI
-	LDI	r19,0xF3		; Issue setrate command
-	RCALL	ps2_write
-	LDS	r19,setrateval		; Send new mouse rate
-	RCALL	ps2_write
-	RCALL	ps2_flushbuff
-	SEI
-	RCALL	ps2_read
-	BRTS	changerate_retry	; Retry command on timeout
-	RCALL	ps2_flushbuff
-	CPI	r16,0xFC		; Error response
-	BREQ	changerate_done
-	CPI	r16,0xFA		; FA response means OK
-	BRNE	changerate_retry
-    changerate_done:
+    	RCALL	ps2_setrate		; Mouse rate change
 	CLR	r19			; Clear rate value and return to loop
 	STS	setrateval,r19
 	RJMP	idleloop
@@ -373,6 +501,7 @@ sendevent:
 ;
 rts_cycle:
     	CLR	r19			; Revert to 1200 baud
+	STS	linesetup,r19
 	RCALL	USART_setbaud
 	RCALL	SetMSmode		; Set converter to MS mode
 	CLR	r20			; Send 'M' character for Microsoft
@@ -415,6 +544,10 @@ SetMMmode:
 	RCALL	USART_setbits
 	LDI	r19,3			; Set odd parity
 	RCALL	USART_setparity
+	LDS	r19,linesetup
+	ANDI	r19,0b0011
+	ORI	r19,0b1100
+	STS	linesetup,r19
 	RET
 	; SetMMmode
 
@@ -427,6 +560,10 @@ SetTBPmode:
 	STS	mousemode,r16
 	LDI	r19,1			; Set to 8-bit frame format
 	RCALL	USART_setbits
+	LDS	r19,linesetup
+	ANDI	r19,0b0011
+	ORI	r19,0b0100
+	STS	linesetup,r19
 	RET
 	; SetTBPmode
 	
@@ -439,6 +576,10 @@ SetMSYSmode:
 	STS	mousemode,r16
 	LDI	r19,1			; Set to 8-bit frame format
 	RCALL	USART_setbits
+	LDS	r19,linesetup
+	ANDI	r19,0b0011
+	ORI	r19,0b0100
+	STS	linesetup,r19
 	RET
 	; SetMSYSmode
 
@@ -455,6 +596,9 @@ SetMSmode:
 	STS	mousemode,r16
 	LDI	r19,0			; Set to 7-bit frame format
 	RCALL	USART_setbits
+	LDS	r19,linesetup
+	ANDI	r19,0b0011
+	STS	linesetup,r19
 	RET
 	; SetMSmode
 	
@@ -697,16 +841,20 @@ ratetable:
 ;
 copyright_str:
 	.DB	13,10
-	.DB	"LAMEMOUSECONVERTER V0.13  "
+	.DB	"LAMEMOUSECONVERTER V1.14  "
 	.DB	"BY JOHN ",0x22,"LAMEGUY",0x22," WILBERT VILLAMOR",13,10
 	.DB	"2021-2022 MEIDO-TEK KYS TECH HARDWARE DIVISION",13,10
 	.DB     "RELEASED UNDER MPL V2 ",13,10
 	.DB	0x22,"THERE SHOULD BE FILTERS AGAINST <PROJECTNAME>-DEV TYPES",0x22,13,10,0
 
+;
 ; Start of data segment
 ;
 .DSEG
 
+;
+; PS/2 variables
+;
 ps2_clkstack:	.BYTE 8			; Click event stack (FIFO style)
 ps2_clkhead:	.BYTE 1			; Stack head offset
 ps2_clktail:	.BYTE 1			; Stack tail offset
@@ -715,9 +863,29 @@ ps2_lastclk:	.BYTE 1			; Most recent mouse click
 ps2rec_count:	.BYTE 1			; Bytes currently received
 ps2rec_readoff:	.BYTE 1			; Offset counter for ps2_read
 ps2rec_maxpkt:	.BYTE 1			; PS/2 maximum packet length
-
 setrateval:	.BYTE 1			; Mouse rate change value
+mouserate:	.BYTE 1			; Current mouse report rate
 
+;
+; Quadrature emulation counters
+;
+quadcount:	.BYTE 1
+
+resetbits:	.BYTE 1
+
+;
+; Line settings
+;
+linesetup:	.BYTE 1			; bit0-1  : Baud rate
+					;             0-1200, 1-2400
+					;             2-4800, 3-9600
+					; bit2    : Word size
+					;             0:7bit, 1:8bit
+					; bit3    : Parity
+
+;
+; C7 emulation variables
+;
 mousemode:	.BYTE 1			; Mouse mode
 					;   bit0  : Parse PS/2 stream
 					;   bit1  : Last middle mouse state

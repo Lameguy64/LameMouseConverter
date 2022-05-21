@@ -5,6 +5,9 @@
 ;
 ; Protected under Mozilla Public License v2
 
+.EQU PS2_MODE_REMOTE = 0xF0
+.EQU PS2_MODE_STREAM = 0xEA
+
 ; Mouse fail routine (shows a blinking status light before retrying)
 ;
 mousefail:
@@ -15,12 +18,14 @@ mousefail:
 	OUT	L13_PORT,r16
 	LDI	r20,0x01
 	LDI	r19,0xF4
+	WDR
 	RCALL	delayms
 	IN	r16,L13_PORT		; Turn off status LED
 	CBR	r16,(1<<L13_PIN)
 	OUT	L13_PORT,r16
 	LDI	r20,0x01
 	LDI	r19,0xF4
+	WDR
 	RCALL	delayms
 	DEC	r17
 	BRNE	blink_loop
@@ -55,14 +60,31 @@ ps2_init:
 	BREQ	mouseok			; Otherwise show init error to
 	RJMP	mousefail		; indicate attached mouse is bad
     mouseok:
+	LDI	r16,3			; Set max packet length to 3 bytes
+	STS	ps2rec_maxpkt,r16	; (for standard 3-button mouse mode)
+    	CLR	r22			; Accumulated X motion
+	CLR	r23
+	CLR	r24			; Accumulated Y motion
+	CLR	r25
+	RET
+	; ps2_init
+    	
+; ps2_setrate - Set mouse report rate
+;
+; Arguments:
+;	r19	Desired mouse report rate
+;
+ps2_setrate:
+	RCALL	ps2_flushbuff
     	LDI	r17,5			; Retry attempts +1
     mouserate_retry:
     	DEC	r17			; Skip mouse rate when all attempts
 	BREQ	mouserate_skip		; has failed
+	PUSH	r19
     	CLI
-    	LDI	r19,0xF3		; Set mouse rate to default rate
+    	LDI	r19,0xF3		; Set mouse rate to specified rate
 	RCALL	ps2_write
-	LDI	r19,PS2_RATE
+	POP	r19
 	RCALL	ps2_write
 	SEI
 	RCALL	ps2_read
@@ -72,33 +94,33 @@ ps2_init:
 	BREQ	mouserate_skip
 	CPI	r16,0xFA		; Response byte FA means OK
 	BRNE	mouserate_retry
+	STS	mouserate,r19
     mouserate_skip:
-	LDI	r16,3			; Set max packet length to 3 bytes
-	STS	ps2rec_maxpkt,r16	; (for standard 3-button mouse mode)
+	RET
+	; ps2_setrate
+	
+; ps2_setmode - Set mouse mode
+;
+ps2_setmode:
 	LDI	r17,5			; Retry count + 1
-    mousestream_retry:
+    mousemode_retry:
     	DEC	r17
-	BREQ	mousestream_fail
+	BREQ	mousemode_fail
 	CLI
-	LDI	r19,0xEA		; Set stream mode
-	RCALL	ps2_write
+	RCALL	ps2_write		; Set stream mode
 	SEI
 	RCALL	ps2_read
 	RCALL	ps2_flushbuff
-	BRTS	mousestream_retry
+	BRTS	mousemode_retry
 	CPI	r16,0xFA
-	BREQ	mousestream_ok
-	RJMP	mousestream_retry
-    mousestream_fail:
+	BREQ	mousemode_ok
+	RJMP	mousemode_retry
+    mousemode_fail:
     	RJMP	mousefail		; Streaming mode is required
-    mousestream_ok:
-    	CLR	r22			; Accumulated X motion
-	CLR	r23
-	CLR	r24			; Accumulated Y motion
-	CLR	r25
-	RET
-	; ps2_init
-
+    mousemode_ok:
+    	RET
+    	; ps2_setmode
+    	
 ; ps2_enable - Enable mouse for streaming mode
 ;
 ps2_enable:
@@ -382,6 +404,7 @@ ps2_int:
 	LDS	r17,ps2rec_maxpkt	; buffer count
 	CP	r16,r17
 	BRMI	int0ret			; If not enough bytes of a packet
+	RCALL	processQuad		; Relay quadrature signals
 	SBRC	r8,4			; Check X sign bit
 	RJMP	xminus
 	ADD	r22,r9			; Accumulate X axis on positive
@@ -437,3 +460,103 @@ ps2_int:
 	POP	r16
 	RETI
 	; ps2_int
+	
+
+; Relays mouse inputs as simulated quadrature mouse signals (interrupt driven)
+;
+; Registers r8 to r10 are expected to contain PS/2 mouse packet data.
+;
+processQuad:
+	IN	r16,QB_DDR		; Relay mouse button states
+	BST	r8,0
+	BLD	r16,QBL_PIN
+	BST	r8,1
+	BLD	r16,QBR_PIN
+	OUT	QB_DDR,r16
+	LDI	r20,2			; Double the movement signals as
+    q_double:				; otherwise most mice will be too slow
+	MOV	r19,r9
+	CPI	r19,0
+	BREQ	qx_nomove
+	LDS	r18,quadcount		; Get counter of X quadrature
+	ANDI	r18,0b0011
+	SBRC	r8,4
+	NEG	r19
+    qx_pulseloop:
+    	SBRC	r8,4
+    	INC	r18
+    	SBRS	r8,4
+    	DEC	r18
+	LDI	r17,0b1100		; Quadrature pattern
+	ANDI	r18,0b0011
+	BREQ	qx_skipshft		; Skip shifting if counter is zero
+	MOV	r16,r18
+    qx_shftloop:
+    	LSR	r17
+    	DEC	r16
+    	BRNE	qx_shftloop
+    qx_skipshft:
+    	IN	r16,QX_PORT		; Set shifted bits to output pins
+    	BST	r17,2
+    	BLD	r16,QXA_PIN
+    	BST	r17,3
+    	BLD	r16,QXB_PIN
+    	OUT	QX_PORT,r16
+    	PUSH	r24			; Delay even though the Microsoft InPort
+    	delay10us			; card still responds without it, but a
+    	POP	r24			; delay is here nonetheless
+    	DEC	r19
+    	BRNE	qx_pulseloop
+    	LDS	r16,quadcount
+    	ANDI	r16,~0b0011
+    	OR	r16,r18
+    	STS	quadcount,r16
+    qx_nomove:
+    qy_double:
+	MOV	r19,r10
+	CPI	r19,0
+	BREQ	qy_nomove
+	LDS	r18,quadcount		; Get counter of Y quadrature
+	LSR	r18
+	LSR	r18
+	ANDI	r18,0b0011
+	SBRC	r8,5
+	NEG	r19
+    qy_pulseloop:
+    	SBRS	r8,5
+    	INC	r18
+    	SBRC	r8,5
+    	DEC	r18
+	LDI	r17,0b1100		; Quadrature pattern
+	ANDI	r18,0b0011
+	BREQ	qy_skipshft		; Skip shifting if counter is zero
+	MOV	r16,r18
+    qy_shftloop:
+    	LSR	r17
+    	DEC	r16
+    	BRNE	qy_shftloop
+    qy_skipshft:
+    	IN	r16,QY_PORT		; Set shifted bits to output pins
+    	BST	r17,2
+    	BLD	r16,QYA_PIN
+    	BST	r17,3
+    	BLD	r16,QYB_PIN
+    	OUT	QY_PORT,r16
+    	PUSH	r24
+    	delay10us
+    	POP	r24
+    	DEC	r19
+    	BRNE	qy_pulseloop
+    	LDS	r16,quadcount
+    	ANDI	r16,~0b1100
+    	LSL	r18
+    	LSL	r18
+    	OR	r16,r18
+    	STS	quadcount,r16
+    qy_nomove:
+        DEC	r20
+    	BREQ	q_exit
+    	RJMP	q_double
+    q_exit:
+	RET
+	; processQuad
