@@ -323,10 +323,7 @@ reset:
 	STS	quadcount,r16
 	LDI	r19,0b0100
 	STS	linesetup,r19
-	RJMP	cleardone
     noclearmode:
-	RJMP	noclearmode
-    cleardone:
 	STS	ps2_clkhead,r16
 	STS	ps2_clktail,r16
 	STS	ps2_clkcount,r16
