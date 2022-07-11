@@ -9,7 +9,14 @@
 ;
 ; Changelog:
 ;
+;   July 11, 2022:
+;     * Version 1.15.
+;     * Rewrote quadrature emulation code to a new timer based implementation
+;	operating at 20KHz. Fixes erratic mouse movement on Amiga and to some
+;	degree also on Bus/InPort.
+;
 ;   May 21, 2022:
+;     * Version 1.14.
 ;     * Added quadrature mouse emulation (always active).
 ;     * Renamed main assembler file from 'PS2SER2.ASM' to 'LMC.ASM'.
 ;     * Implemented watchdog timer. Not guaranteed if WDT reset preserves
@@ -223,12 +230,14 @@
 ;
 ; Interrupt vector table
 ;
-.ORG 0x0000				; reset vector
+.ORG 0x0000				; Reset vector
 	RJMP	reset
 .ORG 0x0002				; Interrupt 0 request
 	RJMP	ps2_int
+.ORG 0x001C				; Timer 0 interrupt
+	RJMP	quad_int
 .ORG 0x0024				; USART receive
-	RJMP     USART_recvfunc
+	RJMP	USART_recvfunc
 ;
 ; Begin of program code
 ;	
@@ -307,6 +316,16 @@ reset:
 	LDI	r19,0			; Set initial baud rate (1200)
 	RCALL	USART_setbaud
 	RCALL	ps2_flushbuff		; Reset recv buffer
+	;
+	LDI	r16,(1<<WGM01)		; Set CTC timer mode
+	OUT	TCCR0A,r16
+	LDI	r16,(1<<CS01)		; Clock select at clk/8
+	OUT	TCCR0B,r16
+	LDI	r16,100			; 20KHz rate ((16000000/8)/20000 = 100)
+	OUT	OCR0A,r16
+	LDI	r16,(1<<OCIE0A)
+	STS	TIMSK0,r16
+	;
 	WDR				; Setup watchdog timer
 	LDI	r16,(1<<WDCE)|(1<<WDE)
 	STS	WDTCSR,r16
@@ -324,6 +343,10 @@ reset:
 	LDI	r19,0b0100
 	STS	linesetup,r19
     noclearmode:
+	STS	quad_xmove,r16
+	STS	quad_xmove+1,r16
+	STS	quad_ymove,r16
+	STS	quad_ymove+1,r16
 	STS	ps2_clkhead,r16
 	STS	ps2_clktail,r16
 	STS	ps2_clkcount,r16
@@ -838,7 +861,7 @@ ratetable:
 ;
 copyright_str:
 	.DB	13,10
-	.DB	"LAMEMOUSECONVERTER V1.14  "
+	.DB	"LAMEMOUSECONVERTER V1.15  "
 	.DB	"BY JOHN ",0x22,"LAMEGUY",0x22," WILBERT VILLAMOR",13,10
 	.DB	"2021-2022 MEIDO-TEK KYS TECH HARDWARE DIVISION",13,10
 	.DB     "RELEASED UNDER MPL V2 ",13,10
@@ -864,9 +887,11 @@ setrateval:	.BYTE 1			; Mouse rate change value
 mouserate:	.BYTE 1			; Current mouse report rate
 
 ;
-; Quadrature emulation counters
+; Quadrature emulation variables
 ;
-quadcount:	.BYTE 1
+quadcount:	.BYTE 1			; Quadrature sequence counters
+quad_xmove:	.BYTE 2			; X-movement delta
+quad_ymove:	.BYTE 2			; Y-movement delta
 
 resetbits:	.BYTE 1
 

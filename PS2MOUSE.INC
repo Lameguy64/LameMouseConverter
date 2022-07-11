@@ -473,90 +473,147 @@ processQuad:
 	BST	r8,1
 	BLD	r16,QBR_PIN
 	OUT	QB_DDR,r16
-	LDI	r20,2			; Double the movement signals as
-    q_double:				; otherwise most mice will be too slow
-	MOV	r19,r9
-	CPI	r19,0
-	BREQ	qx_nomove
-	LDS	r18,quadcount		; Get counter of X quadrature
-	ANDI	r18,0b0011
-	SBRC	r8,4
-	NEG	r19
-    qx_pulseloop:
-    	SBRC	r8,4
-    	INC	r18
-    	SBRS	r8,4
-    	DEC	r18
-	LDI	r17,0b1100		; Quadrature pattern
-	ANDI	r18,0b0011
-	BREQ	qx_skipshft		; Skip shifting if counter is zero
-	MOV	r16,r18
-    qx_shftloop:
-    	LSR	r17
-    	DEC	r16
-    	BRNE	qx_shftloop
-    qx_skipshft:
-    	IN	r16,QX_PORT		; Set shifted bits to output pins
-    	BST	r17,2
-    	BLD	r16,QXA_PIN
-    	BST	r17,3
-    	BLD	r16,QXB_PIN
-    	OUT	QX_PORT,r16
-    	PUSH	r24			; Delay even though the Microsoft InPort
-    	delay10us			; card still responds without it, but a
-    	POP	r24			; delay is here nonetheless
-    	DEC	r19
-    	BRNE	qx_pulseloop
-    	LDS	r16,quadcount
-    	ANDI	r16,~0b0011
-    	OR	r16,r18
-    	STS	quadcount,r16
-    qx_nomove:
-    qy_double:
-	MOV	r19,r10
-	CPI	r19,0
-	BREQ	qy_nomove
-	LDS	r18,quadcount		; Get counter of Y quadrature
-	LSR	r18
-	LSR	r18
-	ANDI	r18,0b0011
-	SBRC	r8,5
-	NEG	r19
-    qy_pulseloop:
-    	SBRS	r8,5
-    	INC	r18
-    	SBRC	r8,5
-    	DEC	r18
-	LDI	r17,0b1100		; Quadrature pattern
-	ANDI	r18,0b0011
-	BREQ	qy_skipshft		; Skip shifting if counter is zero
-	MOV	r16,r18
-    qy_shftloop:
-    	LSR	r17
-    	DEC	r16
-    	BRNE	qy_shftloop
-    qy_skipshft:
-    	IN	r16,QY_PORT		; Set shifted bits to output pins
-    	BST	r17,2
-    	BLD	r16,QYA_PIN
-    	BST	r17,3
-    	BLD	r16,QYB_PIN
-    	OUT	QY_PORT,r16
-    	PUSH	r24
-    	delay10us
-    	POP	r24
-    	DEC	r19
-    	BRNE	qy_pulseloop
-    	LDS	r16,quadcount
-    	ANDI	r16,~0b1100
-    	LSL	r18
-    	LSL	r18
-    	OR	r16,r18
-    	STS	quadcount,r16
-    qy_nomove:
-        DEC	r20
-    	BREQ	q_exit
-    	RJMP	q_double
-    q_exit:
+	LDS	r18,quad_xmove		; Load quadrature X-delta
+	LDS	r19,quad_xmove+1
+	MOV	r16,r9
+	SBRC	r8,4			; Check X sign bit
+	RJMP	pq_xminus
+	ADD	r18,r16			; Accumulate X axis on positive
+	CLR	r16
+	ADC	r19,r16
+	RJMP	pq_xdone
+    pq_xminus:
+    	NEG	r16			; Invert value for negative arithmetic
+	SUB	r18,r16
+	SBCI	r19,0
+    pq_xdone:
+   	STS	quad_xmove,r18		; Store updated X-delta
+	STS	quad_xmove+1,r19
+	LDS	r18,quad_ymove		; Load quadrature Y-delta
+	LDS	r19,quad_ymove+1
+	MOV	r16,r10
+	SBRC	r8,5			; Check Y sign bit
+	RJMP	pq_yminus
+	ADD	r18,r16			; Accumulate Y axis on positive
+	CLR	r16
+	ADC	r19,r16
+	RJMP	pq_ydone
+    pq_yminus:
+    	NEG	r16			; Invert value for negative arithmetic
+	SUB	r18,r16
+	SBCI	r19,0
+    pq_ydone:
+   	STS	quad_ymove,r18		; Store updated Y-delta
+	STS	quad_ymove+1,r19
 	RET
 	; processQuad
+
+quad_int:
+	PUSH	r16
+	IN	r16,SREG
+	PUSH	r16
+	PUSH	r17
+	PUSH	r18
+	PUSH	r19
+	LDS	r17,quadcount		; Get quadrature counters
+	ANDI	r17,0b0011		; Mask X bits
+	LDS	r18,quad_xmove		; Load quadrature X-delta word
+	LDS	r19,quad_xmove+1
+	AND	r18,r18			; Test if value is non-zero
+	BRNE	qix_good
+	AND	r19,r19			; Test high word
+	BRNE	qix_good
+	RJMP	qix_done		; Skip if both bytes are zero
+    qix_good:
+	SBRC	r19,7			; Is sign bit set in high word?
+	RJMP	qix_neg			; Jump to negative routine
+	INC	r17			; Increment counter
+	SUBI	r18,1			; Decrement delta
+	SBCI	r19,0
+	RJMP	qix_done
+    qix_neg:
+    	DEC	r17			; Decrement counter
+	LDI	r16,1			; Increment delta
+	ADD	r18,r16
+	CLR	r16
+	ADC	r19,r16
+    qix_done:
+    	STS	quad_xmove,r18
+	STS	quad_xmove+1,r19
+    	ANDI	r17,0B0011		; Wrap counter with mask
+	LDS	r16,quadcount		; Store updated counter
+	ANDI	r16,0B1100		; Mask out old bits
+	OR	r16,r17
+	STS	quadcount,r16
+	LDI	r16,0B0011		; Load quadrature pattern
+	AND	r17,r17			; Skip shift loop if value is zero
+	BREQ	qix_noshift
+    qix_shiftloop:
+    	LSL	r16
+	DEC	r17
+	BRNE	qix_shiftloop
+    qix_noshift:
+    	IN	r17,QX_PORT		; Set shifted bits to output pins
+    	BST	r16,2
+    	BLD	r17,QXA_PIN
+    	BST	r16,3
+    	BLD	r17,QXB_PIN
+	OUT	QX_PORT,r17
+	LDS	r17,quadcount		; Get quadrature counters
+	LSR	r17			; Shift into Y bits
+	LSR	r17
+	ANDI	r17,0b0011		; Mask Y bits
+	LDS	r18,quad_ymove		; Load quadrature Y-delta word
+	LDS	r19,quad_ymove+1
+	AND	r18,r18			; Test if value is non-zero
+	BRNE	qiy_good
+	AND	r19,r19			; Test high word
+	BRNE	qiy_good
+	RJMP	qiy_done		; Skip if both bytes are zero
+    qiy_good:
+	SBRC	r19,7			; Is sign bit set in high word?
+	RJMP	qiy_neg			; Jump to negative routine
+	INC	r17			; Increment counter
+	SUBI	r18,1			; Decrement delta
+	SBCI	r19,0
+	RJMP	qiy_done
+    qiy_neg:
+    	DEC	r17			; Decrement counter
+	LDI	r16,1			; Increment delta
+	ADD	r18,r16
+	CLR	r16
+	ADC	r19,r16
+    qiy_done:
+    	STS	quad_ymove,r18
+	STS	quad_ymove+1,r19
+    	ANDI	r17,0B0011		; Wrap counter with mask
+	PUSH	r17
+	LDS	r16,quadcount		; Store updated counter
+	LSL	r17
+	LSL	r17
+	ANDI	r16,0B0011		; Mask out old bits
+	OR	r16,r17
+	STS	quadcount,r16
+	POP	r17
+	LDI	r16,0B1100		; Load quadrature pattern
+	AND	r17,r17			; Skip shift loop if value is zero
+	BREQ	qiy_noshift
+    qiy_shiftloop:
+    	LSR	r16
+	DEC	r17
+	BRNE	qiy_shiftloop
+    qiy_noshift:
+    	IN	r17,QY_PORT		; Set shifted bits to output pins
+    	BST	r16,0
+    	BLD	r17,QYA_PIN
+    	BST	r16,1
+    	BLD	r17,QYB_PIN
+	OUT	QY_PORT,r17
+	POP	r19
+	POP	r18
+	POP	r17
+	POP	r16
+	OUT	SREG,r16
+	POP	r16
+	RETI
+	; quad_int
