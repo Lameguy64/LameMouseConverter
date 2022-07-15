@@ -70,6 +70,13 @@ Table of Contents
 
 2. What's new
 
+    Version 1.15 rewrites the quadrature mouse simulation routines as the pre-
+    vious implementation from 1.14 was flawed, resulting in uneven and jittery
+    mouse movement most apparent on the Amiga.  The rewritten routines employs
+    a timer-based implementation operating at 20KHz,  relaying one  quadrature
+    cycle per timer tick until  all  accumulated  movement has been relayed as
+    quadrature signals.
+
     Version 1.14 adds 2-button  quadrature  mouse  simulation for use with any
     quadrature based  mouse  interfaces  such  Microsoft InPort, Bus Mouse and
     Amiga mouse to name a few.  The  quadrature  mouse  simulation function is
@@ -542,7 +549,7 @@ Table of Contents
     bit and no parity. Middle button  is  supported  by means of transmitting
     the mouse packet with zero motion values, but the mouse button states are
     kept from the last packet. A compatible  mouse driver will interpret this
-    packet as a middle button 'toggle'.
+    packet as a toggle of the middle button.
 
       Byte b6  b5  b4  b3  b2  b1  b0
       -------------------------------
@@ -550,7 +557,7 @@ Table of Contents
        2nd  0  x5  x4  x3  x2  x1  x0
        3rd  0  y5  y5  y3  y2  y1  y0
 
-       LB,MB,RB    Button state (1 =  pressed)
+       LB,RB       Button state (1 =  pressed)
        x0-x7       X motion as signed two's complement (-128 to 127).
        y0-y7       Y motion as signed two's complement (-128 to 127).
 
@@ -558,7 +565,7 @@ Table of Contents
   8.4. SummaMouse MM Series Format (command: 'S')
 
     The following table  describes  the  packet  format  of the MM Series com-
-    patible format as used  by  SummaGraphics MM Series  products. Packets are
+    patible format as used  by  SummaGraphics MM Series products.  Packets are
     typically reported at 2400 baud, 8 data bits, 1 stop bit and odd parity.
 
       Byte b7  b6  b5  b4  b3  b2  b1  b0
@@ -578,16 +585,16 @@ Table of Contents
 
   8.5. Quadrature Mouse
 
-     While not necessarily a protocol it  is a signalling scheme that was used
-     for pointing devices.  A quadrature mouse  is  nothing more but a pair of
-     rotary encoders connected directly  to  the mouse port of a computer with
-     schmitt-triggers in between to 'square out'  the  signals from the photo-
-     transistors.  Essentially the mouse controller is inside the computer in-
-     stead of the mouse itself. The buttons are merely pull-down switches.
+     While not necessarily a protocol it was a signalling scheme used by older
+     pointing devices. A quadrature mouse is nothing more but a pair of rotary
+     encoders with Schmitt-triggers  to  'square out'  the signals coming from
+     the encoders before feeding it to the host system.  Essentially the mouse
+     controller is inside the computer instead of the mouse itself.
 
-     Quadrature signals are simulated by the mouse converter as follows.  Keep
-     note that the mouse converter performs  two quadrature steps as otherwise
-     mouse movements would be registered too slow.
+     The mouse converter emulates quadrature  inputs  by  simulating the pulse
+     cycles of a rotary encoder.  Simulating cycling rate based on velocity is
+     not necessary as most interfaces simply  count  the  cycles as opposed to
+     determining the frequency of the pulses.
 
        Signal >0 >1 >2 >3
        -------------------
